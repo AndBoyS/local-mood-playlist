@@ -17,20 +17,27 @@ from local_smart_playlist.type_utils import NonEmptyTuple
 DEFAULT_TOP_N = 10
 
 
-def resolve_rel_path(raw: str, root: Path) -> str:
+def resolve_rel_path(raw: str | Path, root: Path, *, indexed_paths: set[str] | None = None) -> str:
     """Normalize *raw* to a POSIX rel path from the library root.
 
-    Accepts an absolute path, a cwd-relative path inside the root, or an
-    already-indexed rel path. Falls back to the input as-is when it does not
-    live under the root (get_track will surface a clear error).
+    Accepts an absolute path, including one reached through a symlink or an
+    alternate root whose trailing path matches an indexed track, a cwd-relative
+    path inside the root, or an already-indexed rel path. Falls back to the
+    input as-is when no indexed suffix matches.
     """
-    absolute = Path(raw).expanduser()
+    raw_path = Path(raw).expanduser()
+    absolute = raw_path
     if not absolute.is_absolute():
         absolute = Path.cwd() / absolute
     try:
-        return absolute.relative_to(root).as_posix()
+        return absolute.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
-        return Path(raw).expanduser().as_posix()
+        if raw_path.is_absolute() and indexed_paths is not None:
+            absolute_text = absolute.as_posix().rstrip("/")
+            matches = [rel_path for rel_path in indexed_paths if absolute_text.endswith(f"/{rel_path}")]
+            if len(matches) > 0:
+                return max(matches, key=len)
+        return raw_path.as_posix()
 
 
 def rank_captions[M: IntVar](
@@ -64,7 +71,8 @@ class DescribeArgs:
             root = Path(library_root).expanduser()
             if not root.is_absolute():
                 root = Path.cwd() / root
-            rel_path = resolve_rel_path(path, root)
+            indexed_paths = store.track_rel_paths() if Path(path).expanduser().is_absolute() else None
+            rel_path = resolve_rel_path(path, root, indexed_paths=indexed_paths)
             track = store.get_track(rel_path)
             if track is None:
                 raise SystemExit(f"track not in index: {path}")

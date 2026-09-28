@@ -108,6 +108,18 @@ def test_resolve_rel_path_already_relative_falls_back(tmp_path: Path) -> None:
     assert rel == "a/song.flac"
 
 
+def test_resolve_rel_path_matches_absolute_path_from_alternate_root(tmp_path: Path) -> None:
+    raw = str(tmp_path / "alternate" / "[Selected]" / "a" / "song.flac")
+    rel = describe_cmd.resolve_rel_path(raw, tmp_path / "indexed", indexed_paths={"a/song.flac"})
+    assert rel == "a/song.flac"
+
+
+def test_resolve_rel_path_prefers_longest_indexed_suffix(tmp_path: Path) -> None:
+    raw = str(tmp_path / "alternate" / "a" / "song.flac")
+    rel = describe_cmd.resolve_rel_path(raw, tmp_path / "indexed", indexed_paths={"song.flac", "a/song.flac"})
+    assert rel == "a/song.flac"
+
+
 @pytest.mark.parametrize("n", [0, -1])
 def test_run_rejects_non_positive_caption_count(n: int) -> None:
     with pytest.raises(SystemExit, match="number of captions must be positive"):
@@ -138,6 +150,24 @@ def test_run_track_not_in_index(monkeypatch: Any, tmp_path: Path) -> None:
         upsert_track(store, "other.flac", basis(0))
     with pytest.raises(SystemExit, match="track not in index"):
         describe_cmd.DescribeArgs.run(path=str(root / "missing.flac"), db=db, n=10)
+
+
+def test_run_describes_track_from_alternate_root(monkeypatch: Any, tmp_path: Path, capsys: Any) -> None:
+    monkeypatch.setattr(describe_cmd, "load_model", fake_load_model)
+    monkeypatch.setattr(describe_cmd, "Store", fake_store)
+    root = tmp_path / "indexed"
+    root.mkdir()
+    db = tmp_path / "index.db"
+    with Store(db, embed_dim=DIM) as store:
+        store.set_meta(MetaKey.LIBRARY_ROOT, str(root))
+        upsert_track(store, "a/song.flac", basis(0))
+
+    monkeypatch.setattr(prompts, "caption_vocab", lambda: NonEmptyTuple(("caption A", "caption B")))
+    alternate_path = tmp_path / "alternate" / "[Selected]" / "a" / "song.flac"
+    describe_cmd.DescribeArgs.run(path=str(alternate_path), db=db, n=2)
+    out = capsys.readouterr().out
+    assert "a/song.flac" in out
+    assert "caption A" in out
 
 
 def test_run_describes_track(monkeypatch: Any, tmp_path: Path, capsys: Any) -> None:
