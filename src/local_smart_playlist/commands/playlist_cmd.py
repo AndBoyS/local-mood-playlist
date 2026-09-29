@@ -12,7 +12,7 @@ from local_smart_playlist.embed.model import MODEL_ID, cap_torch_threads, load_m
 from local_smart_playlist.index.store import MetaKey, Store, TrackData
 from local_smart_playlist.query.contrast import query_vector_contrast
 from local_smart_playlist.query.playlist import playlist_path, write_playlist
-from local_smart_playlist.query.prompts import adapt_mood, caption_vocab
+from local_smart_playlist.query.prompts import adapt_mood, calibration_prompt_bank
 from local_smart_playlist.query.search import rank_by_similarity
 from local_smart_playlist.query.vocab_cal import (
     VOCAB_SCORE_FLOOR,
@@ -93,7 +93,7 @@ class PlayArgs:
                     for variant in adapted:
                         print(f"  - {variant}")
                 model = load_model(device="cpu", text_only=True)
-                vocab_vecs = vocab_vector_bank_cached(store, model, vocab=caption_vocab())
+                vocab_vecs = vocab_vector_bank_cached(store, model, vocab=calibration_prompt_bank())
                 per_query_rankings = [
                     rank_by_vocab_calibration(
                         store,

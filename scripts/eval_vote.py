@@ -4,7 +4,7 @@ Read-only over the live index. Computes, per probe query, exemplar ranks and
 top-5 previews for:
 
 - V0  production median margin (reference)
-- V1  hard argmax vote share, candidates = {query} + 20 anchors
+- V1  hard argmax vote share, candidates = {query} + calibration references
 - V1b same, twin-pruned (drop the single anchor most similar to the query)
 - V2  softmax vote mass, p = exp(q/T) / sum exp(c/T), T in {0.02, 0.05, 0.1}
 - V3  relevance probability p = sigmoid((cos_q - bar) / T), bar from the
@@ -23,8 +23,7 @@ from shape_extensions import IntVar
 
 from local_smart_playlist.embed.model import MODEL_ID, cap_torch_threads, load_model
 from local_smart_playlist.index.store import Store, TrackData
-from local_smart_playlist.query.contrast import MOOD_ANCHORS, query_vector_contrast
-from local_smart_playlist.type_utils import NonEmptyTuple
+from local_smart_playlist.query.contrast import CALIBRATION_REFERENCE_PROMPTS, query_vector_contrast
 
 D = IntVar("D")  # embedding dim
 
@@ -121,7 +120,10 @@ def tfs_diagnostics(*, query_vec: np.ndarray, anchor_vecs: np.ndarray, windows: 
     print("  TFS per-window diagnostics:")
     print(f"    cos(q)   mean {q.mean():.3f}  min {q.min():.3f}  max {q.max():.3f}")
     print(f"    anchor aff  mean {am.mean():.3f}  spread +-2s [{am.mean() - 2 * am.std():.3f}, {am.max():.3f}]")
-    print(f"    per-window anchors beaten by q: {np.asarray(q[:, None] > a).sum(axis=1).mean():.1f}/20")  # pyrefly: ignore[unsupported-operation]
+    print(
+        f"    per-window references beaten by q: "
+        f"{np.asarray(q[:, None] > a).sum(axis=1).mean():.1f}/{anchor_vecs.shape[0]}"  # pyrefly: ignore[unsupported-operation]
+    )
     bars = (
         ("mean", am),
         ("p25", np.asarray(np.percentile(a, 25, axis=1))),
@@ -145,7 +147,7 @@ def main() -> None:
     with Store(args.db) as store:
         store.require_model(MODEL_ID)
         model = load_model()
-        anchor_prompts = NonEmptyTuple(MOOD_ANCHORS)
+        anchor_prompts = CALIBRATION_REFERENCE_PROMPTS
         anchor_vecs = _unit(np.asarray(model.embed_texts(anchor_prompts), dtype=np.float32))
         windows_all = store.load_windows(store.track_rel_paths())
         tracks = []
@@ -155,14 +157,14 @@ def main() -> None:
             if track is None or window_vecs is None or window_vecs.shape[0] == 0:
                 continue
             tracks.append((track, window_vecs))
-        print(f"# db={args.db}  tracks={len(tracks)}  anchors={len(MOOD_ANCHORS)}")
+        print(f"# db={args.db}  tracks={len(tracks)}  anchors={len(CALIBRATION_REFERENCE_PROMPTS)}")
 
         for query, exemplars in PROBES.items():
             qvec = query_vector_contrast(query, model)
             anchor_sims = np.asarray(anchor_vecs @ qvec, dtype=np.float64).ravel()
             twin_idx = int(anchor_sims.argmax())
             twins = ", ".join(
-                f"{MOOD_ANCHORS[i][:34]!r}={anchor_sims[i]:.3f}" for i in np.argsort(-anchor_sims)[:3].tolist()
+                f"{CALIBRATION_REFERENCE_PROMPTS[i][:34]!r}={anchor_sims[i]:.3f}" for i in np.argsort(-anchor_sims)[:3].tolist()
             )
             print(f"\n== {query!r}")
             print(f"  closest anchors to query: {twins}")

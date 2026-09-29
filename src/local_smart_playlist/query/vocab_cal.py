@@ -1,20 +1,19 @@
-"""Caption-vocab calibration ranker (lever #5, CAF-Score style).
+"""Reference-bank calibration ranker (CAF-Score style).
 
-Per window, the query's affinity is calibrated against the window's own
-affinity profile over the caption vocabulary used by `sp describe`: the
-score is the percentile of cos(window, query) among that window's
-cos(window, caption) values. This is a self-referential baseline — the bar
-is the window's own distribution over the readout captions, not 20
-hand-picked mood anchors — so the texture-dependent similarity scale
-partially cancels: a window counts when the query fits better than a
-typical caption *for that window*.
+Per window, the query's affinity is calibrated against its affinity to the
+readout captions augmented with balanced reference prompts: the score is the
+percentile of cos(window, query) among that window's cos(window, anchor)
+values. This is a self-referential baseline — the bar is the window's own
+distribution over reference prompts — so the texture-dependent similarity
+scale partially cancels: a window counts when the query fits better than a
+typical anchor *for that window*.
 
 Track score = mean per-window percentile in [0, 1] (sustained mood), ties
 broken by coverage (share of windows above 0.5). Semantics: 0.5 = the query
-fits as well as a typical caption for the average window of the track.
+fits as well as a typical anchor for the average window of the track.
 
-Ranking is a full-library scan over stored window vectors; the vocab must be
-re-embedded per run (215 captions, a few seconds), no re-index needed.
+Ranking is a full-library scan over stored window vectors; the bank must be
+embedded per run (a few seconds), no re-index needed.
 """
 
 import base64
@@ -46,7 +45,7 @@ NEUTRAL = 0.5
 
 
 def vocab_vector_bank(model: MuLanEmbedder[D], vocab: NonEmptyTuple[str]) -> np.ndarray[[V, D]]:
-    """Unit-norm embeddings of the caption vocabulary, one row per caption."""
+    """Unit-norm embeddings of the reference prompt bank, one row per prompt."""
     embeds = model.embed_texts(vocab)
     return l2_normalize(embeds)
 
@@ -81,9 +80,9 @@ def _decode_bank(*, blob: str, dim: int, n: int, vocab_digest: str) -> np.ndarra
 
 
 def vocab_vector_bank_cached(store: Store, model: MuLanEmbedder[D], *, vocab: NonEmptyTuple[str]) -> np.ndarray[[V, D]]:
-    """Unit-norm vocab embeddings, cached under one fixed metadata key.
+    """Unit-norm reference embeddings, cached under one fixed metadata key.
 
-    Cache value includes format, model, and vocabulary digest; changes silently
+    Cache value includes format, model, and prompt-bank digest; changes silently
     invalidate the prior value. Decoding also validates row count and dimension.
     """
     digest = _vocab_digest(vocab)
@@ -152,8 +151,8 @@ def rank_by_vocab_calibration(
     """Rank every indexed track by vocab-calibrated sustained mood; returns top *k*.
 
     Full scan over stored window vectors, ties broken by coverage then rel
-    path. Every window uses its caption-vocabulary percentile, including
-    windows with low affinity to every caption.
+    path. Every window uses its reference-bank percentile, including windows
+    with low affinity to every prompt.
     """
     excluded = set() if exclude is None else set(exclude)
     flat_vecs = store.load_windows_flat(store.track_rel_paths())

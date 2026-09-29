@@ -2,8 +2,8 @@
 
 For every track: max cos(track mean_vec, caption vocab) — the same metric
 `sp describe` prints as its top row. Reports the distribution and the worst
-tracks, i.e. edge cases with no good anchor in the vocab (relevant if the
-vocab bank replaces/extends the 20 mood anchors).
+tracks, i.e. edge cases with no good reference in the vocab (useful when
+comparing the readout vocabulary with the calibration-reference prompts).
 """
 
 import numpy as np

@@ -1,11 +1,11 @@
-"""Margin scoring and the broad-mood anchor bank (guard/eval components).
+"""Margin scoring and reference prompts (guard/eval components).
 
 The additive-margin ranker described here was the production ranker until it
-was replaced by the caption-vocab calibration (``query/vocab_cal.py``). Its
+was replaced by reference-bank calibration (``query/vocab_cal.py``). Its
 pieces remain live:
 
-- **MOOD_ANCHORS / baseline_vector**: the 20 broad-mood anchor bank and its
-  unnormalized mean — used by the legacy median-margin contrast ranker below.
+- **CALIBRATION_REFERENCE_PROMPTS / baseline_vector**: the 96 reference
+  prompts and their unnormalized mean — used by the legacy median-margin ranker.
 - **query_vector_contrast**: unit embedding of the query text — still how
   text queries become vectors.
 - **contrast_score / rank_by_contrast**: the median-margin ranker, kept for
@@ -29,49 +29,26 @@ from shape_extensions import IntVar
 from local_smart_playlist.embed.model import MODEL_ID, MuLanEmbedder
 from local_smart_playlist.index.store import MetaKey, Store, TrackData
 from local_smart_playlist.numpy_helpers import l2_normalize, reshape
+from local_smart_playlist.query.prompts import calibration_reference_prompts
 from local_smart_playlist.type_utils import NonEmptyTuple
 
 W = IntVar("W")  # window count
 D = IntVar("D")  # embedding dim
 
-# Broad mood anchors spanning the widest stylistic range the vocab's caption
-# style covers (en + zh). Their mean approximates "music in general"; window
-# affinity to it is subtracted from query affinity.
-MOOD_ANCHORS = NonEmptyTuple[str](
-    (
-        "happy mood, major key, bright melody.",
-        "sad mood, slow tempo, minor key.",
-        "calm mood, slow tempo, soft dynamics.",
-        "relaxed mood, mellow groove, warm tone.",
-        "energetic mood, fast tempo, driving drums.",
-        "dark mood, low drones, dissonant textures.",
-        "dreamy mood, reverb pads, hazy atmosphere.",
-        "angry mood, aggressive distorted guitars.",
-        "tense mood, suspenseful pulsing strings.",
-        "nostalgic mood, warm analog synths.",
-        "romantic mood, intimate vocals, slow tempo.",
-        "欢快情绪，明亮旋律。",
-        "悲伤情绪，慢节奏，小调。",
-        "平静情绪，慢节奏，柔和音色。",
-        "充满活力的情绪，快节奏。",
-        "黑暗情绪，低沉氛围。",
-        "梦幻情绪，混响氛围。",
-        "紧张情绪，悬疑氛围。",
-        "怀旧情绪，温暖合成器。",
-        "浪漫情绪，亲密氛围。",
-    )
-)
+# Used by the legacy margin ranker. Production percentile calibration includes
+# these references alongside the independent readout-caption vocabulary.
+CALIBRATION_REFERENCE_PROMPTS = calibration_reference_prompts()
 
 
 def baseline_vector(model: MuLanEmbedder[D], *, anchors: NonEmptyTuple[str] | None = None) -> np.ndarray[[D]]:
-    """Unnormalized mean of unit broad-mood anchor embeddings.
+    """Unnormalized mean of unit calibration-reference embeddings.
 
     Kept unnormalized so ``window @ baseline`` equals the *mean of the
-    window's per-anchor cosines* — its affinity to music-in-general. A unit
+    window's per-reference cosines* — its affinity to general music. A unit
     centroid would inflate the baseline by 1/‖centroid‖ (~2–3x for a diverse
     anchor set) and bury gentle textures under the broad baseline.
     """
-    prompts = MOOD_ANCHORS if anchors is None else anchors
+    prompts = CALIBRATION_REFERENCE_PROMPTS if anchors is None else anchors
     embeddings = model.embed_texts(prompts)
     vecs = l2_normalize(embeddings)
     return vecs.mean(axis=0)
@@ -110,7 +87,7 @@ def baseline_vector_cached(
     anchors: NonEmptyTuple[str] | None = None,
 ) -> np.ndarray[[D]]:
     """Cache the static baseline embedding by model and anchor identity."""
-    prompts = MOOD_ANCHORS if anchors is None else anchors
+    prompts = CALIBRATION_REFERENCE_PROMPTS if anchors is None else anchors
     digest = _baseline_digest(prompts)
     cached = store.get_meta(MetaKey.MOOD_BASELINE_VEC)
     if cached is not None:

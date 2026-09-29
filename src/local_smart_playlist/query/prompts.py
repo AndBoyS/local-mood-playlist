@@ -8,8 +8,9 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 
-from local_smart_playlist.const import CAPTION_VOCAB_PATH
+from local_smart_playlist.const import CALIBRATION_REFERENCE_PROMPTS_PATH, CAPTION_VOCAB_PATH
 from local_smart_playlist.type_utils import NonEmptyTuple
 
 logger = logging.getLogger(__name__)
@@ -18,12 +19,27 @@ DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1"  # OpenCode Go subscription
 DEFAULT_MODEL = "deepseek-v4-flash"
 
 
-def caption_vocab() -> NonEmptyTuple[str]:
-    """Readout vocabulary lines, blank-stripped, `#` comments dropped."""
-    vocab_text = CAPTION_VOCAB_PATH.read_text(encoding="utf-8")
+def _read_prompt_bank(path: Path) -> NonEmptyTuple[str]:
+    """Read nonblank prompt lines, dropping `#` comments."""
+    prompt_text = path.read_text(encoding="utf-8")
     return NonEmptyTuple(
-        line.strip() for line in vocab_text.splitlines() if line.strip() != "" and not line.lstrip().startswith("#")
+        line.strip() for line in prompt_text.splitlines() if line.strip() != "" and not line.lstrip().startswith("#")
     )
+
+
+def caption_vocab() -> NonEmptyTuple[str]:
+    """Readout vocabulary used by `sp describe` and LLM style examples."""
+    return _read_prompt_bank(CAPTION_VOCAB_PATH)
+
+
+def calibration_reference_prompts() -> NonEmptyTuple[str]:
+    """Read balanced prompts used as calibration references."""
+    return _read_prompt_bank(CALIBRATION_REFERENCE_PROMPTS_PATH)
+
+
+def calibration_prompt_bank() -> NonEmptyTuple[str]:
+    """Caption readout prompts plus calibration references for playlist ranking."""
+    return NonEmptyTuple((*caption_vocab(), *calibration_reference_prompts()))
 
 
 ADAPT_PROMPT = (

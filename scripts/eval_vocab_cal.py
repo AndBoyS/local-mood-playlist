@@ -13,7 +13,7 @@ from shape_extensions import IntVar
 from local_smart_playlist.embed.model import MODEL_ID, cap_torch_threads, load_model
 from local_smart_playlist.index.store import Store, TrackData
 from local_smart_playlist.query.contrast import query_vector_contrast
-from local_smart_playlist.query.prompts import caption_vocab
+from local_smart_playlist.query.prompts import calibration_prompt_bank
 from local_smart_playlist.query.vocab_cal import (
     VOCAB_SCORE_FLOOR,
     rank_by_vocab_calibration,
@@ -43,7 +43,7 @@ def main() -> None:
         raise SystemExit(f"no index at {args.db}; run `sp index` first")
 
     probes: dict[str, list[str]] = {q: [] for q in args.queries} if args.queries else PROBES
-    vocab = caption_vocab()
+    vocab = calibration_prompt_bank()
     with Store(args.db) as store:
         store.require_model(MODEL_ID)
         model = load_model()

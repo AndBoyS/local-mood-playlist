@@ -10,8 +10,8 @@ kept as readout-only diagnostic). Numbers from the live index
 
 Text query → unit query vector (embedded exactly as written — the old
 `{q} mood.` variant was removed, it moved comma queries off soft textures) →
-per-window margin `cos(window, query) − mean_i cos(window, anchor_i)` over 20
-broad mood anchors (`MOOD_ANCHORS`, en+zh) → track score = **median** margin
+per-window margin `cos(window, query) − mean_i cos(window, reference_i)` over 20
+legacy broad-mood prompts (en+zh; now replaced by calibration references) → track score = **median** margin
 (coverage = share of positive windows, tiebreak) → cutoff
 `max(0.02, min_score × best)`.
 

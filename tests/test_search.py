@@ -171,6 +171,18 @@ def test_adapt_prompt_uses_model_caption_examples() -> None:
     assert vocab[-1] in prompt
 
 
+def test_calibration_prompt_bank_adds_distinct_references_to_readout_vocab() -> None:
+    bank = prompts.calibration_prompt_bank()
+    references = prompts.calibration_reference_prompts()
+    captions = prompts.caption_vocab()
+    assert len(bank) == len(captions) + 96
+    assert len(references) == 96
+    assert len(set(bank)) == len(bank)
+    assert bank[: len(captions)] == captions
+    assert "calm mood, gentle dynamics." in references
+    assert "live band performance, audience noise, changing dynamics." in references
+
+
 def test_adapt_mood_logs_correction(monkeypatch: Any, caplog: Any) -> None:
     """Successful correction logs input -> output at INFO."""
     import logging

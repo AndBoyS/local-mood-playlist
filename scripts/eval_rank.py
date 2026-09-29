@@ -18,7 +18,7 @@ from shape_extensions import IntVar
 from local_smart_playlist.embed.model import MODEL_ID, MuLanEmbedder, cap_torch_threads, load_model
 from local_smart_playlist.index.store import Store, TrackData
 from local_smart_playlist.query.contrast import query_vector_contrast
-from local_smart_playlist.query.prompts import caption_vocab
+from local_smart_playlist.query.prompts import calibration_prompt_bank
 from local_smart_playlist.query.vocab_cal import VOCAB_SCORE_FLOOR, rank_by_vocab_calibration, vocab_vector_bank
 
 # Probe query -> case-insensitive substrings of exemplar tracks (rel_path or
@@ -38,7 +38,7 @@ def rank_full[D: IntVar](
 ) -> list[tuple[TrackData[D], float]]:
     """Full-library ranking with the production ranker (caption-vocab calibration)."""
     qvec = query_vector_contrast(query, model)
-    vocab_vecs = vocab_vector_bank(model, caption_vocab())
+    vocab_vecs = vocab_vector_bank(model, calibration_prompt_bank())
     ranked = rank_by_vocab_calibration(
         store,
         query_vec=qvec,
