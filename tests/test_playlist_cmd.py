@@ -74,6 +74,54 @@ def test_play_starts_vacuum_after_closing_store(monkeypatch: pytest.MonkeyPatch,
     store.vacuum_if_needed.assert_called_once_with(execute=False)
 
 
+def test_play_decomposes_each_llm_variant_before_ranking(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from local_smart_playlist.query.axis_prompts import QueryAxis
+
+    db = tmp_path / "index.db"
+    db.touch()
+    store = MagicMock()
+    store.__enter__.return_value = store
+    store.get_meta.return_value = str(tmp_path)
+    store.track_count.return_value = 1
+    store.vacuum_if_needed.return_value.recommended = False
+    track = TrackData(rel_path="result.mp3", title="result", duration=60.0)
+    variants = ["sad piano", "dreamy jazz"]
+    decompositions = [
+        {QueryAxis.MOOD: "sad", QueryAxis.INSTRUMENT: "piano"},
+        {QueryAxis.MOOD: "dreamy", QueryAxis.GENRE: "jazz"},
+    ]
+    decompose = MagicMock(side_effect=decompositions)
+    rank = MagicMock(return_value=[(track, 0.95)])
+
+    def make_store(_db: Path) -> MagicMock:
+        return store
+
+    monkeypatch.setattr(playlist_cmd, "cap_torch_threads", lambda: None)
+    monkeypatch.setattr(playlist_cmd, "Store", make_store)
+    monkeypatch.setattr(playlist_cmd, "load_model", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(playlist_cmd, "vocab_vector_bank_cached", MagicMock(return_value=object()))
+    monkeypatch.setattr(playlist_cmd, "axis_vector_banks", MagicMock(return_value={}))
+    monkeypatch.setattr(playlist_cmd, "adapt_mood", MagicMock(return_value=variants))
+    monkeypatch.setattr(playlist_cmd, "decompose_query_axes", decompose)
+    monkeypatch.setattr(playlist_cmd, "rank_text_components", rank)
+
+    playlist_cmd.PlayArgs.run(
+        query="a sad piano tune",
+        db=db,
+        n=None,
+        out=None,
+        llm=True,
+        seed_track=None,
+        alpha=playlist_cmd.PLAY_DEFAULT_ALPHA,
+        min_score=0.9,
+        dry=True,
+    )
+
+    assert [call.args[0] for call in decompose.call_args_list] == variants
+    assert [call.kwargs["components"] for call in rank.call_args_list] == decompositions
+    assert rank.call_count == len(variants)
+
+
 def test_play_crashes_when_llm_adaptation_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     db = tmp_path / "index.db"
     db.touch()

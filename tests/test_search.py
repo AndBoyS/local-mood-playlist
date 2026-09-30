@@ -8,6 +8,7 @@ import pytest
 
 from local_smart_playlist.index.store import Store
 from local_smart_playlist.query import prompts
+from local_smart_playlist.query.axis_prompts import ALL_AXIS_PROMPTS
 from local_smart_playlist.query.search import (
     PEAK_WEIGHT,
     rank_by_similarity,
@@ -165,7 +166,7 @@ def test_expand_mood_raises_on_unreachable(monkeypatch: Any, caplog: Any) -> Non
 
 def test_adapt_prompt_uses_model_caption_examples() -> None:
     prompt = prompts._adapt_prompt()
-    vocab = prompts.caption_vocab()
+    vocab = prompts.read_prompt_bank(prompts.CAPTION_VOCAB_PATH)
     assert "Readout-caption style examples:" in prompt
     assert vocab[0] in prompt
     assert vocab[-1] in prompt
@@ -173,14 +174,57 @@ def test_adapt_prompt_uses_model_caption_examples() -> None:
 
 def test_calibration_prompt_bank_adds_distinct_references_to_readout_vocab() -> None:
     bank = prompts.calibration_prompt_bank()
-    references = prompts.calibration_reference_prompts()
-    captions = prompts.caption_vocab()
-    assert len(bank) == len(captions) + 96
-    assert len(references) == 96
+    references = ALL_AXIS_PROMPTS
+    captions = prompts.read_prompt_bank(prompts.CAPTION_VOCAB_PATH)
+    assert len(bank) == len(captions) + len(references)
+    assert len(references) == 256
     assert len(set(bank)) == len(bank)
     assert bank[: len(captions)] == captions
     assert "calm mood, gentle dynamics." in references
     assert "live band performance, audience noise, changing dynamics." in references
+
+
+def test_decompose_query_axes_extracts_components(monkeypatch: Any) -> None:
+    from types import SimpleNamespace
+
+    import httpx
+
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "content": '{"mood":"sad","instruments/sources":"piano","genre/style":"jazz"}'
+                }
+            }
+        ]
+    }
+
+    def fake_post(url: str, **kwargs: Any) -> Any:
+        assert kwargs["json"]["temperature"] == 0.0
+        return SimpleNamespace(raise_for_status=lambda: None, json=lambda: payload)
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    assert prompts.decompose_query_axes("sad piano jazz") == {
+        prompts.QueryAxis.MOOD: "sad",
+        prompts.QueryAxis.INSTRUMENT: "piano",
+        prompts.QueryAxis.GENRE: "jazz",
+    }
+
+
+def test_decompose_query_axes_rejects_invented_terms(monkeypatch: Any) -> None:
+    from types import SimpleNamespace
+
+    import httpx
+
+    payload = {
+        "choices": [{"message": {"content": '{"mood":"sad and dreamy"}'}}]
+    }
+    def fake_post(_url: str, **_kwargs: Any) -> Any:
+        return SimpleNamespace(raise_for_status=lambda: None, json=lambda: payload)
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    with pytest.raises(prompts.LlmError, match="invented terms"):
+        _ = prompts.decompose_query_axes("sad piano")
 
 
 def test_adapt_mood_logs_correction(monkeypatch: Any, caplog: Any) -> None:

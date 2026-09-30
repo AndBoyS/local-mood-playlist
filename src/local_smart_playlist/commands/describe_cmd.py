@@ -8,10 +8,11 @@ from rich.table import Table
 from shape_extensions import IntVar
 
 from local_smart_playlist.config import default_db_path
+from local_smart_playlist.const import CAPTION_VOCAB_PATH
 from local_smart_playlist.embed.model import MODEL_ID, MuLanEmbedder, cap_torch_threads, load_model
 from local_smart_playlist.index.store import MetaKey, Store
-from local_smart_playlist.query import prompts
 from local_smart_playlist.query.phrases import track_documents
+from local_smart_playlist.query.prompts import read_prompt_bank
 from local_smart_playlist.type_utils import NonEmptyTuple
 
 DEFAULT_TOP_N = 10
@@ -81,7 +82,12 @@ class DescribeArgs:
             if vectors is None or n_windows is None:
                 raise RuntimeError(f"stored track has incomplete data: {rel_path}")
             model = load_model(device="cpu", text_only=True)
-            captions = rank_captions(model, mean_vec=vectors.mean_vec, vocab=prompts.caption_vocab(), top_n=n)
+            captions = rank_captions(
+                model,
+                mean_vec=vectors.mean_vec,
+                vocab=read_prompt_bank(CAPTION_VOCAB_PATH),
+                top_n=n,
+            )
 
         rprint(f"[bold]{track.title}[/bold]  {track.duration:.1f}s  {n_windows} windows  {rel_path}")
         table = Table(title="caption-vocab neighbors")

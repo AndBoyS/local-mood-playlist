@@ -22,10 +22,12 @@ class IndexArgs(tap.TypedArgs):
 
 
 class PlayArgs(tap.TypedArgs):
-    query: str = tap.arg(positional=True, metavar="QUERY", help="Mood word or phrase")
+    query: str = tap.arg(positional=True, metavar="QUERY", help="Mood, genre, instrument, or other music query")
     n: int | None = tap.arg("-n", default=None, help="Number of tracks (default: all indexed)")
     out: str | None = tap.arg("-o", default=None, help="Output m3u8 path, or '-' for stdout")
-    llm: bool = tap.arg(help="Generate and show MuQ-MuLan-style query variants with an LLM before embedding")
+    llm: bool = tap.arg(
+        help="Generate query variants, then decompose each into musical axes with an LLM before embedding"
+    )
     seed_track: str | None = tap.arg(
         default=None, metavar="PATH", help="Use a track's vector as the query instead of text"
     )
@@ -35,8 +37,8 @@ class PlayArgs(tap.TypedArgs):
     )
     min_score: float = tap.arg(
         default=0.9,
-        help="Absolute calibrated score cutoff in [0.5, 1): 0.5 = query fits as well as a typical "
-        "caption (neutral), 0.9 = clearly on-mood (default 0.9)",
+        help="Absolute calibrated cutoff in [0.5, 1): every recognized query axis must clear it "
+        "(default 0.9; 0.5 is neutral)",
     )
     dry: bool = tap.arg(help="Print the result without writing a playlist")
     db: Path | None = tap.arg(

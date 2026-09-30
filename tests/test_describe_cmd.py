@@ -18,6 +18,10 @@ from local_smart_playlist.type_utils import NonEmptyTuple
 DIM = 8
 
 
+def _read_test_prompts(_path: Path) -> NonEmptyTuple[str]:
+    return NonEmptyTuple(("caption A", "caption B"))
+
+
 def basis(i: int) -> np.ndarray:
     v = np.zeros(DIM, dtype=np.float32)
     v[i] = 1.0  # pyrefly: ignore[unsupported-operation]  # numpy shape stubs lack __setitem__ (facebook/pyrefly#4901)
@@ -162,7 +166,7 @@ def test_run_describes_track_from_alternate_root(monkeypatch: Any, tmp_path: Pat
         store.set_meta(MetaKey.LIBRARY_ROOT, str(root))
         upsert_track(store, "a/song.flac", basis(0))
 
-    monkeypatch.setattr(prompts, "caption_vocab", lambda: NonEmptyTuple(("caption A", "caption B")))
+    monkeypatch.setattr(prompts, "read_prompt_bank", _read_test_prompts)
     alternate_path = tmp_path / "alternate" / "[Selected]" / "a" / "song.flac"
     describe_cmd.DescribeArgs.run(path=str(alternate_path), db=db, n=2)
     out = capsys.readouterr().out
@@ -180,7 +184,7 @@ def test_run_describes_track(monkeypatch: Any, tmp_path: Path, capsys: Any) -> N
         store.set_meta(MetaKey.LIBRARY_ROOT, str(root))
         upsert_track(store, "song.flac", basis(0))
 
-    monkeypatch.setattr(prompts, "caption_vocab", lambda: NonEmptyTuple(("caption A", "caption B")))
+    monkeypatch.setattr(prompts, "read_prompt_bank", _read_test_prompts)
     describe_cmd.DescribeArgs.run(path=str(root / "song.flac"), db=db, n=2)
     out = capsys.readouterr().out
     assert "song.flac" in out

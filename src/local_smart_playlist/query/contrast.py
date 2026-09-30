@@ -4,7 +4,7 @@ The additive-margin ranker described here was the production ranker until it
 was replaced by reference-bank calibration (``query/vocab_cal.py``). Its
 pieces remain live:
 
-- **CALIBRATION_REFERENCE_PROMPTS / baseline_vector**: the 96 reference
+- **ALL_AXIS_PROMPTS / baseline_vector**: the 256 reference
   prompts and their unnormalized mean — used by the legacy median-margin ranker.
 - **query_vector_contrast**: unit embedding of the query text — still how
   text queries become vectors.
@@ -29,17 +29,14 @@ from shape_extensions import IntVar
 from local_smart_playlist.embed.model import MODEL_ID, MuLanEmbedder
 from local_smart_playlist.index.store import MetaKey, Store, TrackData
 from local_smart_playlist.numpy_helpers import l2_normalize, reshape
-from local_smart_playlist.query.prompts import calibration_reference_prompts
+from local_smart_playlist.query.axis_prompts import ALL_AXIS_PROMPTS
 from local_smart_playlist.type_utils import NonEmptyTuple
 
 W = IntVar("W")  # window count
 D = IntVar("D")  # embedding dim
 
-# Used by the legacy margin ranker. Production percentile calibration includes
-# these references alongside the independent readout-caption vocabulary.
-CALIBRATION_REFERENCE_PROMPTS = calibration_reference_prompts()
-
-
+# Production percentile calibration includes these references alongside the
+# independent readout-caption vocabulary.
 def baseline_vector(model: MuLanEmbedder[D], *, anchors: NonEmptyTuple[str] | None = None) -> np.ndarray[[D]]:
     """Unnormalized mean of unit calibration-reference embeddings.
 
@@ -48,7 +45,7 @@ def baseline_vector(model: MuLanEmbedder[D], *, anchors: NonEmptyTuple[str] | No
     centroid would inflate the baseline by 1/‖centroid‖ (~2–3x for a diverse
     anchor set) and bury gentle textures under the broad baseline.
     """
-    prompts = CALIBRATION_REFERENCE_PROMPTS if anchors is None else anchors
+    prompts = ALL_AXIS_PROMPTS if anchors is None else anchors
     embeddings = model.embed_texts(prompts)
     vecs = l2_normalize(embeddings)
     return vecs.mean(axis=0)
@@ -87,7 +84,7 @@ def baseline_vector_cached(
     anchors: NonEmptyTuple[str] | None = None,
 ) -> np.ndarray[[D]]:
     """Cache the static baseline embedding by model and anchor identity."""
-    prompts = CALIBRATION_REFERENCE_PROMPTS if anchors is None else anchors
+    prompts = ALL_AXIS_PROMPTS if anchors is None else anchors
     digest = _baseline_digest(prompts)
     cached = store.get_meta(MetaKey.MOOD_BASELINE_VEC)
     if cached is not None:

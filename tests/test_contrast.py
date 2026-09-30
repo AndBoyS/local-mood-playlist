@@ -8,13 +8,8 @@ import pytest
 
 from local_smart_playlist.embed.model import MuLanEmbedder
 from local_smart_playlist.index.store import Store
-from local_smart_playlist.query.contrast import (
-    CALIBRATION_REFERENCE_PROMPTS,
-    baseline_vector,
-    contrast_score,
-    query_vector_contrast,
-    rank_by_contrast,
-)
+from local_smart_playlist.query.axis_prompts import ALL_AXIS_PROMPTS
+from local_smart_playlist.query.contrast import baseline_vector, contrast_score, query_vector_contrast, rank_by_contrast
 from local_smart_playlist.type_utils import NonEmptyTuple
 
 if TYPE_CHECKING:
@@ -88,14 +83,14 @@ def test_non_empty_tuple_rejects_empty_iterable() -> None:
 
 def test_reference_prompt_bank_is_broad_and_distinct() -> None:
     """Reference set spans multiple musical attributes without duplicate prompts."""
-    assert len(CALIBRATION_REFERENCE_PROMPTS) == 96
-    assert len(set(CALIBRATION_REFERENCE_PROMPTS)) == len(CALIBRATION_REFERENCE_PROMPTS)
+    assert len(ALL_AXIS_PROMPTS) == 256
+    assert len(set(ALL_AXIS_PROMPTS)) == len(ALL_AXIS_PROMPTS)
 
 
 def test_baseline_is_mean_of_reference_affinities() -> None:
     """Baseline stays unnormalized: window @ baseline == mean of per-reference cosines."""
     bvec = baseline_vector(_hash_embedder())
-    anchor_vecs = np.asarray(fake_embedder(list(CALIBRATION_REFERENCE_PROMPTS)), dtype=np.float64)
+    anchor_vecs = np.asarray(fake_embedder(list(ALL_AXIS_PROMPTS)), dtype=np.float64)
     anchor_vecs = anchor_vecs / np.linalg.norm(anchor_vecs, axis=-1, keepdims=True)
     anchor_mean = np.asarray(anchor_vecs.mean(axis=0), dtype=np.float64)  # pyrefly: ignore[unknown-argument-type]
     assert np.allclose(bvec, anchor_mean, atol=1e-6)

@@ -8,7 +8,3 @@ if not DATA_DIR.is_dir():
 CAPTION_VOCAB_PATH = DATA_DIR / "caption_vocab.txt"
 if not CAPTION_VOCAB_PATH.is_file():
     raise FileNotFoundError(f"caption vocabulary file not found: {CAPTION_VOCAB_PATH}")
-
-CALIBRATION_REFERENCE_PROMPTS_PATH = DATA_DIR / "calibration_reference_prompts.txt"
-if not CALIBRATION_REFERENCE_PROMPTS_PATH.is_file():
-    raise FileNotFoundError(f"calibration reference prompt file not found: {CALIBRATION_REFERENCE_PROMPTS_PATH}")

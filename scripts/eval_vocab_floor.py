@@ -19,7 +19,7 @@ WORST_COUNT = 20
 
 def main() -> None:
     cap_torch_threads()
-    vocab = prompts.caption_vocab()
+    vocab = prompts.read_prompt_bank(prompts.CAPTION_VOCAB_PATH)
     if len(vocab) == 0:
         raise RuntimeError("caption vocabulary is empty")
     vocab_vecs = np.asarray(load_model().embed_texts(NonEmptyTuple(vocab)), dtype=np.float32)  # (V, D)

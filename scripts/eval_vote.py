@@ -23,7 +23,8 @@ from shape_extensions import IntVar
 
 from local_smart_playlist.embed.model import MODEL_ID, cap_torch_threads, load_model
 from local_smart_playlist.index.store import Store, TrackData
-from local_smart_playlist.query.contrast import CALIBRATION_REFERENCE_PROMPTS, query_vector_contrast
+from local_smart_playlist.query.axis_prompts import ALL_AXIS_PROMPTS
+from local_smart_playlist.query.contrast import query_vector_contrast
 
 D = IntVar("D")  # embedding dim
 
@@ -147,7 +148,7 @@ def main() -> None:
     with Store(args.db) as store:
         store.require_model(MODEL_ID)
         model = load_model()
-        anchor_prompts = CALIBRATION_REFERENCE_PROMPTS
+        anchor_prompts = ALL_AXIS_PROMPTS
         anchor_vecs = _unit(np.asarray(model.embed_texts(anchor_prompts), dtype=np.float32))
         windows_all = store.load_windows(store.track_rel_paths())
         tracks = []
@@ -157,14 +158,14 @@ def main() -> None:
             if track is None or window_vecs is None or window_vecs.shape[0] == 0:
                 continue
             tracks.append((track, window_vecs))
-        print(f"# db={args.db}  tracks={len(tracks)}  anchors={len(CALIBRATION_REFERENCE_PROMPTS)}")
+        print(f"# db={args.db}  tracks={len(tracks)}  anchors={len(ALL_AXIS_PROMPTS)}")
 
         for query, exemplars in PROBES.items():
             qvec = query_vector_contrast(query, model)
             anchor_sims = np.asarray(anchor_vecs @ qvec, dtype=np.float64).ravel()
             twin_idx = int(anchor_sims.argmax())
             twins = ", ".join(
-                f"{CALIBRATION_REFERENCE_PROMPTS[i][:34]!r}={anchor_sims[i]:.3f}" for i in np.argsort(-anchor_sims)[:3].tolist()
+                f"{ALL_AXIS_PROMPTS[i][:34]!r}={anchor_sims[i]:.3f}" for i in np.argsort(-anchor_sims)[:3].tolist()
             )
             print(f"\n== {query!r}")
             print(f"  closest anchors to query: {twins}")

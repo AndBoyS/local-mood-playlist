@@ -4,13 +4,16 @@ Free text becomes a small set of comma-attribute query variants; existing
 comma-attribute lists pass through unchanged (typos/translation only).
 """
 
+import json
 import logging
 import os
 import re
 import time
+from collections import Counter
 from pathlib import Path
 
-from local_smart_playlist.const import CALIBRATION_REFERENCE_PROMPTS_PATH, CAPTION_VOCAB_PATH
+from local_smart_playlist.const import CAPTION_VOCAB_PATH
+from local_smart_playlist.query.axis_prompts import ALL_AXIS_PROMPTS, AXIS_TO_PROMPTS, QueryAxis
 from local_smart_playlist.type_utils import NonEmptyTuple
 
 logger = logging.getLogger(__name__)
@@ -19,7 +22,7 @@ DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1"  # OpenCode Go subscription
 DEFAULT_MODEL = "deepseek-v4-flash"
 
 
-def _read_prompt_bank(path: Path) -> NonEmptyTuple[str]:
+def read_prompt_bank(path: Path) -> NonEmptyTuple[str]:
     """Read nonblank prompt lines, dropping `#` comments."""
     prompt_text = path.read_text(encoding="utf-8")
     return NonEmptyTuple(
@@ -27,19 +30,21 @@ def _read_prompt_bank(path: Path) -> NonEmptyTuple[str]:
     )
 
 
-def caption_vocab() -> NonEmptyTuple[str]:
-    """Readout vocabulary used by `sp describe` and LLM style examples."""
-    return _read_prompt_bank(CAPTION_VOCAB_PATH)
 
-
-def calibration_reference_prompts() -> NonEmptyTuple[str]:
-    """Read balanced prompts used as calibration references."""
-    return _read_prompt_bank(CALIBRATION_REFERENCE_PROMPTS_PATH)
+def calibration_axis_ranges() -> dict[QueryAxis, tuple[int, int]]:
+    """Prompt-bank row ranges for each axis in ``calibration_prompt_bank``."""
+    offset = len(read_prompt_bank(CAPTION_VOCAB_PATH))
+    ranges: dict[QueryAxis, tuple[int, int]] = {}
+    for axis, prompts in AXIS_TO_PROMPTS.items():
+        end = offset + len(prompts)
+        ranges[axis] = (offset, end)
+        offset = end
+    return ranges
 
 
 def calibration_prompt_bank() -> NonEmptyTuple[str]:
-    """Caption readout prompts plus calibration references for playlist ranking."""
-    return NonEmptyTuple((*caption_vocab(), *calibration_reference_prompts()))
+    """Caption readout prompts plus balanced, axis-labelled references."""
+    return NonEmptyTuple((*read_prompt_bank(CAPTION_VOCAB_PATH), *ALL_AXIS_PROMPTS))
 
 
 ADAPT_PROMPT = (
@@ -80,7 +85,7 @@ def _settings() -> tuple[str, str, str]:
 
 def _adapt_prompt() -> str:
     """Add evenly spaced readout-caption examples as a model-specific style reference."""
-    vocab = caption_vocab()
+    vocab = read_prompt_bank(CAPTION_VOCAB_PATH)
     count = min(12, len(vocab))
     if count == 0:
         return ADAPT_PROMPT
@@ -130,3 +135,74 @@ def adapt_mood(mood: str) -> list[str]:
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     logger.info("llm adapt: %r -> %r (%s, %.0f ms)", mood, lines, model, elapsed_ms)
     return lines
+
+
+def decompose_query_axes(query: str) -> dict[QueryAxis, str] | None:
+    """Ask LLM to split one adapted query into axis-labelled source phrases.
+
+    Values must preserve wording from *query*; unrecognized or unsupported
+    attributes are omitted. Returns ``None`` when no supported axis is present.
+    """
+    import uuid
+
+    import httpx
+
+    base_url, model, api_key = _settings()
+    headers = {"x-opencode-session": uuid.uuid4().hex}
+    if api_key != "":
+        headers["Authorization"] = f"Bearer {api_key}"
+    axis_names = ", ".join(axis.value for axis in AXIS_TO_PROMPTS)
+    system_prompt = (
+        "Split one music query into its explicit musical components. Use only these axis keys: "
+        f"{axis_names}. Return one JSON object mapping each present axis to a short phrase copied from the query. "
+        "Do not invent, translate, expand, or infer attributes; keep multiple terms on one axis together. "
+        "Omit absent or ambiguous axes. Return {} if no supported component exists. No markdown or commentary."
+    )
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Query: {query}"},
+        ],
+        "temperature": 0.0,
+    }
+    try:
+        started = time.perf_counter()
+        resp = httpx.post(f"{base_url.rstrip('/')}/chat/completions", json=body, headers=headers, timeout=60.0)
+        _ = resp.raise_for_status()
+        payload = resp.json()
+        content = payload["choices"][0]["message"]["content"]
+        assert isinstance(content, str)
+    except Exception as exc:
+        logger.warning("llm axis decomposition failed for %r via %s/%s: %s", query, base_url, model, exc)
+        msg = f"LLM axis decomposition failed: {exc}"
+        raise LlmError(msg) from exc
+
+    try:
+        decoded = json.loads(content)
+    except json.JSONDecodeError as exc:
+        msg = f"LLM axis decomposition returned invalid JSON: {exc}"
+        raise LlmError(msg) from exc
+    if not isinstance(decoded, dict):
+        raise LlmError("LLM axis decomposition must return a JSON object")
+
+    components: dict[QueryAxis, str] = {}
+    for raw_axis, raw_component in decoded.items():
+        if not isinstance(raw_axis, str) or not isinstance(raw_component, str):
+            raise LlmError("LLM axis decomposition keys and values must be strings")
+        try:
+            axis = QueryAxis(raw_axis)
+        except ValueError as exc:
+            msg = f"LLM axis decomposition returned unsupported axis {raw_axis!r}"
+            raise LlmError(msg) from exc
+        component = raw_component.strip().strip(".,; ")
+        if component != "":
+            source_terms = Counter(re.findall(r"\w+", query.casefold()))
+            component_terms = Counter(re.findall(r"\w+", component.casefold()))
+            if len(component_terms - source_terms) > 0:
+                raise LlmError(f"LLM axis decomposition invented terms for {axis.value!r}")
+            components[axis] = component
+
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    logger.info("llm axis decomposition: %r -> %r (%s, %.0f ms)", query, components, model, elapsed_ms)
+    return components if len(components) > 0 else None

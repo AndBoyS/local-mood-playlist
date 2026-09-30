@@ -198,3 +198,22 @@ texture-correlated by construction of the bar.
 Known trade-offs: vocab re-embedded per run (215 captions, seconds);
 low-affinity caption profiles can still produce extreme percentiles;
 `dark, aggressive` probe unmeasured (no exemplars).
+
+## §8 Axis-conditioned hard gates (implemented)
+
+With `--llm`, each first-stage query variant is decomposed by a second LLM
+call into eight possible axes (mood, genre/style, instruments/sources, vocals,
+tempo/rhythm, arrangement/dynamics, timbre/production, recording/context).
+Each component is calibrated only against its axis's 32 reference prompts. A
+track passes only when its mean window percentile clears `--min-score` on every
+returned axis; results rank by weakest-axis score. Without `--llm`, query uses
+the legacy full-bank calibration; no local axis classifier runs. Reference
+prompts live in `query/axis_prompts.py`; no re-index is needed.
+
+Threshold transfer remains open. Pre-LLM local-router measurements with 32
+references per axis ranked Celeste `calm piano` matches at 0.439 (rank 1629)
+and lower; cutoff 0.9 admitted only 2/6152 tracks. `dreamy, melancholic`
+kept 1380 tracks at 0.9 and ranked TUNIC — To Far Shores 309 (0.967). These
+prototype results may shift with LLM decomposition and are not comparable to
+the old 311-prompt global percentile. Re-measure per-axis thresholds on
+LLM-decomposed, reviewed queries before tuning defaults.

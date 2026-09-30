@@ -10,15 +10,11 @@ from local_smart_playlist.commands import vacuum_worker
 from local_smart_playlist.config import default_db_path, default_playlist_dir
 from local_smart_playlist.embed.model import MODEL_ID, cap_torch_threads, load_model
 from local_smart_playlist.index.store import MetaKey, Store, TrackData
-from local_smart_playlist.query.contrast import query_vector_contrast
 from local_smart_playlist.query.playlist import playlist_path, write_playlist
-from local_smart_playlist.query.prompts import adapt_mood, calibration_prompt_bank
+from local_smart_playlist.query.prompts import adapt_mood, calibration_prompt_bank, decompose_query_axes
+from local_smart_playlist.query.rank_text import axis_vector_banks, rank_text_components
 from local_smart_playlist.query.search import rank_by_similarity
-from local_smart_playlist.query.vocab_cal import (
-    VOCAB_SCORE_FLOOR,
-    rank_by_vocab_calibration,
-    vocab_vector_bank_cached,
-)
+from local_smart_playlist.query.vocab_cal import VOCAB_SCORE_FLOOR, vocab_vector_bank_cached
 
 logger = logging.getLogger(__name__)
 
@@ -94,15 +90,33 @@ class PlayArgs:
                         print(f"  - {variant}")
                 model = load_model(device="cpu", text_only=True)
                 vocab_vecs = vocab_vector_bank_cached(store, model, vocab=calibration_prompt_bank())
+                axis_vocab_vecs = axis_vector_banks(vocab_vecs)
+                cutoff = max(VOCAB_SCORE_FLOOR, min_score)
+                if llm:
+                    decomposed = [(variant, decompose_query_axes(variant)) for variant in adapted]
+                    print("LLM axis components:")
+                    for variant, components in decomposed:
+                        axis_text = (
+                            ", ".join(f"{axis.value}={component}" for axis, component in components.items())
+                            if components is not None
+                            else "global fallback"
+                        )
+                        print(f"  {variant} -> {axis_text}")
+                else:
+                    decomposed = [(variant, None) for variant in adapted]
                 per_query_rankings = [
-                    rank_by_vocab_calibration(
+                    rank_text_components(
                         store,
-                        query_vec=query_vector_contrast(variant, model),
+                        model,
+                        query=variant,
+                        components=components,
                         vocab_vecs=vocab_vecs,
+                        axis_vocab_vecs=axis_vocab_vecs,
+                        min_score=cutoff,
                         k=store.track_count(),
                         exclude=exclude,
                     )
-                    for variant in adapted
+                    for variant, components in decomposed
                 ]
                 ranked = merge_query_rankings(per_query_rankings)
             vacuum_recommended = store.vacuum_if_needed(execute=False).recommended
@@ -112,8 +126,8 @@ class PlayArgs:
 
         cutoff = max(VOCAB_SCORE_FLOOR, min_score)
         if len(ranked) > 0:
-            # Calibrated score is absolute: 0.5 = query fits as well as a typical
-            # caption (neutral), 0.9+ = clearly on-mood. No best-relative cutoff.
+            # Calibrated score is absolute: 0.5 = typical reference fit, 0.9 = strict.
+            # Axis-aware score is weakest requested-axis fit; no best-relative cutoff.
             ranked = [(t, s) for t, s in ranked if s >= cutoff]
             if n is not None:
                 ranked = ranked[:n]

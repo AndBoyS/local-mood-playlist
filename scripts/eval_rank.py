@@ -1,7 +1,7 @@
 """Offline ranking eval: probe queries x exemplar tracks over the live index.
 
-Measures where known soft/dense exemplar tracks rank under the current
-ranker settings, plus a top-k preview, so ranker experiments (difficulties.md
+Measures where known soft/dense exemplar tracks rank under the offline
+global-bank calibration baseline, plus a top-k preview, so ranker experiments (difficulties.md
 §1, §6) can be compared without listening. Read-only: never writes the DB or
 playlists.
 
@@ -17,9 +17,9 @@ from shape_extensions import IntVar
 
 from local_smart_playlist.embed.model import MODEL_ID, MuLanEmbedder, cap_torch_threads, load_model
 from local_smart_playlist.index.store import Store, TrackData
-from local_smart_playlist.query.contrast import query_vector_contrast
 from local_smart_playlist.query.prompts import calibration_prompt_bank
-from local_smart_playlist.query.vocab_cal import VOCAB_SCORE_FLOOR, rank_by_vocab_calibration, vocab_vector_bank
+from local_smart_playlist.query.rank_text import axis_vector_banks, rank_text_components
+from local_smart_playlist.query.vocab_cal import VOCAB_SCORE_FLOOR, vocab_vector_bank
 
 # Probe query -> case-insensitive substrings of exemplar tracks (rel_path or
 # title). Soft/dense exemplars from difficulties.md §1 measurements.
@@ -36,13 +36,16 @@ DEFAULT_MIN_SCORE = 0.9  # sp play --min-score default; kept = score >= max(VOCA
 def rank_full[D: IntVar](
     store: Store, model: MuLanEmbedder[D], *, query: str
 ) -> list[tuple[TrackData[D], float]]:
-    """Full-library ranking with the production ranker (caption-vocab calibration)."""
-    qvec = query_vector_contrast(query, model)
+    """Full-library ranking with offline global-bank calibration fallback."""
     vocab_vecs = vocab_vector_bank(model, calibration_prompt_bank())
-    ranked = rank_by_vocab_calibration(
+    ranked = rank_text_components(
         store,
-        query_vec=qvec,
+        model,
+        query=query,
+        components=None,
         vocab_vecs=vocab_vecs,
+        axis_vocab_vecs=axis_vector_banks(vocab_vecs),
+        min_score=0.0,
         k=store.track_count(),
         exclude=set(),
     )
