@@ -1,8 +1,7 @@
-"""Track → caption-vocab phrase readout for `sp describe` (diagnostics only).
+"""Track → prompt ranking for `sp describe` (diagnostics only).
 
-Playlist ranking never touches the caption vocabulary; this module only
-supports the per-track `sp describe` readout: the top caption phrases nearest
-to the track's mean vector.
+Playlist ranking never uses this module; it supports the per-track readout by
+finding prompt phrases nearest to the track's mean vector.
 """
 
 import numpy as np

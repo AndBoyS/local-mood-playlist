@@ -164,24 +164,13 @@ def test_expand_mood_raises_on_unreachable(monkeypatch: Any, caplog: Any) -> Non
     assert any("llm adapt failed" in r.message for r in caplog.records)
 
 
-def test_adapt_prompt_uses_model_caption_examples() -> None:
-    prompt = prompts._adapt_prompt()
-    vocab = prompts.read_prompt_bank(prompts.CAPTION_VOCAB_PATH)
-    assert "Readout-caption style examples:" in prompt
-    assert vocab[0] in prompt
-    assert vocab[-1] in prompt
-
-
-def test_calibration_prompt_bank_adds_distinct_references_to_readout_vocab() -> None:
+def test_calibration_prompt_bank_contains_only_unique_axis_references() -> None:
     bank = prompts.calibration_prompt_bank()
-    references = ALL_AXIS_PROMPTS
-    captions = prompts.read_prompt_bank(prompts.CAPTION_VOCAB_PATH)
-    assert len(bank) == len(captions) + len(references)
-    assert len(references) == 256
+    assert bank == ALL_AXIS_PROMPTS
+    assert len(bank) == 256
     assert len(set(bank)) == len(bank)
-    assert bank[: len(captions)] == captions
-    assert "calm mood, gentle dynamics." in references
-    assert "live band performance, audience noise, changing dynamics." in references
+    assert "dreamy mood." in bank
+    assert "live recording." in bank
 
 
 def test_decompose_query_axes_extracts_components(monkeypatch: Any) -> None:
@@ -233,6 +222,8 @@ def test_adapt_mood_logs_correction(monkeypatch: Any, caplog: Any) -> None:
     from types import SimpleNamespace
 
     def fake_post(url: str, **kwargs: Any) -> Any:
+        messages = kwargs["json"]["messages"]
+        assert messages[0]["content"] == prompts.ADAPT_PROMPT
         return SimpleNamespace(
             raise_for_status=lambda: None,
             json=lambda: {

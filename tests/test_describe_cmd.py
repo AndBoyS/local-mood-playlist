@@ -1,4 +1,4 @@
-"""`sp describe` tests: caption ranking, path resolution, CLI arg errors."""
+"""`sp describe` tests: prompt ranking, path resolution, CLI arg errors."""
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -8,6 +8,7 @@ import pytest
 
 from local_smart_playlist.commands import describe_cmd
 from local_smart_playlist.embed.model import MuLanEmbedder
+from local_smart_playlist.query.axis_prompts import QueryAxis
 
 if TYPE_CHECKING:
     import torch
@@ -17,8 +18,10 @@ from local_smart_playlist.type_utils import NonEmptyTuple
 DIM = 8
 
 
-def _read_test_prompts(_path: Path) -> NonEmptyTuple[str]:
-    return NonEmptyTuple(("caption A", "caption B"))
+TEST_PROMPTS_BY_AXIS: dict[QueryAxis, NonEmptyTuple[str]] = {
+    QueryAxis.MOOD: NonEmptyTuple(("caption A", "caption B")),
+    QueryAxis.TEMPO: NonEmptyTuple(("caption B", "caption C")),
+}
 
 
 def basis(i: int) -> np.ndarray:
@@ -80,19 +83,29 @@ def upsert_track(store: Store, rel_path: str, mean_vec: np.ndarray) -> None:
     )
 
 
-def test_rank_captions_orders_by_similarity() -> None:
-    vocab = ["caption C", "caption B", "caption A"]
+def test_rank_prompts_orders_by_similarity() -> None:
+    prompts = ["caption C", "caption B", "caption A"]
     mean = basis(0) + 0.5 * basis(1)
     mean = (mean / float(np.linalg.norm(mean))).astype(np.float32)
-    ranked = describe_cmd.rank_captions(fake_embedder(), mean_vec=mean, vocab=NonEmptyTuple(vocab), top_n=2)
+    ranked = describe_cmd.rank_prompts(fake_embedder(), mean_vec=mean, prompts=NonEmptyTuple(prompts), top_n=2)
     assert ranked[0] == ("caption A", pytest.approx(0.8944, abs=1e-3))
     assert ranked[1][0] == "caption B"
 
 
-def test_rank_captions_respects_top_n() -> None:
-    vocab = ["caption A", "caption B"]
-    ranked = describe_cmd.rank_captions(fake_embedder(), mean_vec=basis(1), vocab=NonEmptyTuple(vocab), top_n=1)
+def test_rank_prompts_respects_top_n() -> None:
+    prompts = ["caption A", "caption B"]
+    ranked = describe_cmd.rank_prompts(fake_embedder(), mean_vec=basis(1), prompts=NonEmptyTuple(prompts), top_n=1)
     assert ranked == (("caption B", 1.0),)
+
+
+def test_rank_prompts_by_axis_ranks_each_axis_independently() -> None:
+    mean = basis(0) + 0.5 * basis(1)
+    mean = (mean / float(np.linalg.norm(mean))).astype(np.float32)
+    ranked = describe_cmd.rank_prompts_by_axis(
+        fake_embedder(), mean_vec=mean, prompts_by_axis=TEST_PROMPTS_BY_AXIS, top_n=1
+    )
+    assert ranked[QueryAxis.MOOD] == (("caption A", pytest.approx(0.8944, abs=1e-3)),)
+    assert ranked[QueryAxis.TEMPO] == (("caption B", pytest.approx(0.4472, abs=1e-3)),)
 
 
 def test_resolve_rel_path_absolute_inside_root(tmp_path: Path) -> None:
@@ -124,8 +137,8 @@ def test_resolve_rel_path_prefers_longest_indexed_suffix(tmp_path: Path) -> None
 
 
 @pytest.mark.parametrize("n", [0, -1])
-def test_run_rejects_non_positive_caption_count(n: int) -> None:
-    with pytest.raises(SystemExit, match="number of captions must be positive"):
+def test_run_rejects_non_positive_prompt_count(n: int) -> None:
+    with pytest.raises(SystemExit, match="number of prompts per axis must be positive"):
         describe_cmd.DescribeArgs.run(path="x.flac", db=None, n=n)
 
 
@@ -165,11 +178,13 @@ def test_run_describes_track_from_alternate_root(monkeypatch: Any, tmp_path: Pat
         store.set_meta(MetaKey.LIBRARY_ROOT, str(root))
         upsert_track(store, "a/song.flac", basis(0))
 
-    monkeypatch.setattr(describe_cmd, "read_prompt_bank", _read_test_prompts)
+    monkeypatch.setattr(describe_cmd, "AXIS_TO_PROMPTS", TEST_PROMPTS_BY_AXIS)
     alternate_path = tmp_path / "alternate" / "[Selected]" / "a" / "song.flac"
     describe_cmd.DescribeArgs.run(path=str(alternate_path), db=db, n=2)
     out = capsys.readouterr().out
     assert "a/song.flac" in out
+    assert "mood" in out
+    assert "tempo/rhythm" in out
     assert "caption A" in out
 
 
@@ -183,8 +198,10 @@ def test_run_describes_track(monkeypatch: Any, tmp_path: Path, capsys: Any) -> N
         store.set_meta(MetaKey.LIBRARY_ROOT, str(root))
         upsert_track(store, "song.flac", basis(0))
 
-    monkeypatch.setattr(describe_cmd, "read_prompt_bank", _read_test_prompts)
+    monkeypatch.setattr(describe_cmd, "AXIS_TO_PROMPTS", TEST_PROMPTS_BY_AXIS)
     describe_cmd.DescribeArgs.run(path=str(root / "song.flac"), db=db, n=2)
     out = capsys.readouterr().out
     assert "song.flac" in out
+    assert "mood" in out
+    assert "tempo/rhythm" in out
     assert "caption A" in out

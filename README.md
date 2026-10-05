@@ -20,7 +20,7 @@ uv run sp status
 - `--min-score` is an upper-cluster fit cutoff (default 0.9; floor 0.5 neutral). With `--llm`, every decomposed query axis must clear it.
 - `uv run python scripts/eval_rank.py` — production upper-cluster ranking probe over the live index (no playlist written)
 - `sp status [--db PATH]`
-- `sp describe PATH [-n 10] [--db PATH]` — top caption-vocab neighbors for an indexed track (offline; no LLM; diagnostics only)
+- `sp describe PATH [-n 3] [--db PATH]` — top prompt matches within each attribute axis for an indexed track (ranked independently; offline; no LLM; `-n` sets matches per axis)
 
 Playlists are written to `<library root>/[Playlists]/<query slug>.m3u8` with
 paths relative to the playlist file, so they stay portable across synced

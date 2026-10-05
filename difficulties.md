@@ -155,12 +155,12 @@ of convention — flag semantics were kept honest and users just didn't
 pass `--llm` for canonical attribute lists; measured harm: TFS margin
 0.120 → 0.040, rank 799 → 2012.)
 
-## §7 Caption-vocab calibration ranker (2026 follow-up, shipped)
+## §7 Historical caption-vocab calibration experiment (superseded)
 
-Production ranker: `sp play` scores tracks with caption-vocab calibration
-(lever #5, CAF-Score style; `query/vocab_cal.py`), not additive margin. The
-legacy margin ranker remains in `query/contrast.py` for historical tests; it
-is not part of production text-query scoring.
+Historical notes from the full caption-vocabulary percentile ranker. This is
+not current production behavior: the caption vocabulary and its dedicated
+coverage script were removed when text ranking moved to per-axis reference
+banks in §8. Measurements and trade-offs below describe that earlier system.
 
 Mechanism: per window, score = percentile of cos(w, query) among that
 window's cos(w, caption) values over the 215-caption `sp describe` vocab
@@ -204,11 +204,11 @@ low-affinity caption profiles can still produce extreme percentiles;
 With `--llm`, each first-stage query variant is decomposed by a second LLM
 call into eight possible axes (mood, genre/style, instruments/sources, vocals,
 tempo/rhythm, arrangement/dynamics, timbre/production, recording/context).
-Each component is calibrated only against its axis's 32 reference prompts. A
-track passes only when its mean window percentile clears `--min-score` on every
-returned axis; results rank by weakest-axis score. Without `--llm`, query uses
-the legacy full-bank calibration; no local axis classifier runs. Reference
-prompts live in `query/axis_prompts.py`; no re-index is needed.
+Each component is scored against its axis's 32 reference prompts with the
+upper-cluster scorer. A track must clear `--min-score` on every returned axis;
+results rank by weakest-axis fit. Without `--llm`, the query uses the mood-axis
+references with the same scorer. Reference prompts live in
+`query/axis_prompts.py`; no re-index is needed.
 
 Threshold transfer remains open. Pre-LLM local-router measurements with 32
 references per axis ranked Celeste `calm piano` matches at 0.439 (rank 1629)

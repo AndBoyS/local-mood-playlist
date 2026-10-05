@@ -35,8 +35,8 @@ from local_smart_playlist.type_utils import NonEmptyTuple
 W = IntVar("W")  # window count
 D = IntVar("D")  # embedding dim
 
-# Production percentile calibration includes these references alongside the
-# independent readout-caption vocabulary.
+# Production text-query ranking uses axis-specific reference banks; this
+# baseline helper remains for the legacy margin ranker and its evaluations.
 def baseline_vector(model: MuLanEmbedder[D], *, anchors: NonEmptyTuple[str] | None = None) -> np.ndarray[[D]]:
     """Unnormalized mean of unit calibration-reference embeddings.
 

@@ -8,14 +8,13 @@ from rich.table import Table
 from shape_extensions import IntVar
 
 from local_smart_playlist.config import default_db_path
-from local_smart_playlist.const import CAPTION_VOCAB_PATH
 from local_smart_playlist.embed.model import MODEL_ID, MuLanEmbedder, cap_torch_threads, load_model
 from local_smart_playlist.index.store import MetaKey, Store
+from local_smart_playlist.query.axis_prompts import AXIS_TO_PROMPTS, QueryAxis
 from local_smart_playlist.query.phrases import track_documents
-from local_smart_playlist.query.prompts import read_prompt_bank
 from local_smart_playlist.type_utils import NonEmptyTuple
 
-DEFAULT_TOP_N = 10
+DEFAULT_TOP_N = 3
 
 
 def resolve_rel_path(raw: str | Path, root: Path, *, indexed_paths: set[str] | None = None) -> str:
@@ -41,15 +40,31 @@ def resolve_rel_path(raw: str | Path, root: Path, *, indexed_paths: set[str] | N
         return raw_path.as_posix()
 
 
-def rank_captions[M: IntVar](
-    model: MuLanEmbedder[M], *, mean_vec: np.ndarray[[M]], vocab: NonEmptyTuple[str], top_n: int
+def rank_prompts[M: IntVar](
+    model: MuLanEmbedder[M], *, mean_vec: np.ndarray[[M]], prompts: NonEmptyTuple[str], top_n: int
 ) -> NonEmptyTuple[tuple[str, float]]:
-    """Top captions by cosine similarity between the unit-norm track mean vector and vocab embeddings."""
+    """Top prompts by cosine similarity between track mean vector and prompt embeddings."""
     if top_n <= 0:
         raise ValueError("top_n must be positive")
-    embeds = model.embed_texts(vocab)
+    embeds = model.embed_texts(prompts)
     docs = track_documents(mean_vec, embeds, top_n=top_n)
-    return NonEmptyTuple((vocab[i], sim) for i, sim in docs)
+    return NonEmptyTuple((prompts[i], sim) for i, sim in docs)
+
+
+def rank_prompts_by_axis[M: IntVar](
+    model: MuLanEmbedder[M],
+    *,
+    mean_vec: np.ndarray[[M]],
+    prompts_by_axis: dict[QueryAxis, NonEmptyTuple[str]],
+    top_n: int,
+) -> dict[QueryAxis, NonEmptyTuple[tuple[str, float]]]:
+    """Rank prompts independently within each query axis."""
+    if top_n <= 0:
+        raise ValueError("top_n must be positive")
+    return {
+        axis: rank_prompts(model, mean_vec=mean_vec, prompts=prompts, top_n=top_n)
+        for axis, prompts in prompts_by_axis.items()
+    }
 
 
 class DescribeArgs:
@@ -58,7 +73,7 @@ class DescribeArgs:
     @staticmethod
     def run(*, path: str, db: Path | None, n: int) -> None:
         if n <= 0:
-            raise SystemExit("number of captions must be positive")
+            raise SystemExit("number of prompts per axis must be positive")
         cap_torch_threads()
         db_path = db if db is not None else default_db_path()
         if not db_path.is_file():
@@ -82,17 +97,18 @@ class DescribeArgs:
             if vectors is None or n_windows is None:
                 raise RuntimeError(f"stored track has incomplete data: {rel_path}")
             model = load_model(device="cpu", text_only=True)
-            captions = rank_captions(
+            prompts_by_axis = rank_prompts_by_axis(
                 model,
                 mean_vec=vectors.mean_vec,
-                vocab=read_prompt_bank(CAPTION_VOCAB_PATH),
+                prompts_by_axis=AXIS_TO_PROMPTS,
                 top_n=n,
             )
 
         rprint(f"[bold]{track.title}[/bold]  {track.duration:.1f}s  {n_windows} windows  {rel_path}")
-        table = Table(title="caption-vocab neighbors")
-        table.add_column("sim", justify="right", style="cyan")
-        table.add_column("caption")
-        for caption, sim in captions:
-            table.add_row(f"{sim:.3f}", caption)
-        rprint(table)
+        for axis, prompts in prompts_by_axis.items():
+            table = Table(title=axis.value)
+            table.add_column("sim", justify="right", style="cyan")
+            table.add_column("prompt")
+            for prompt, sim in prompts:
+                table.add_row(f"{sim:.3f}", prompt)
+            rprint(table)

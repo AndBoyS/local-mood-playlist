@@ -40,10 +40,12 @@ def upsert_track(store: Store, rel_path: str, window_vecs: np.ndarray) -> None:
 def test_reference_prompts_are_balanced_and_ranges_match() -> None:
     assert set(AXIS_TO_PROMPTS) == set(QueryAxis)
     assert all(len(prompts) == 32 for prompts in AXIS_TO_PROMPTS.values())
+    assert all("," not in prompt for prompts in AXIS_TO_PROMPTS.values() for prompt in prompts)
+    assert all(prompt.endswith(" mood.") for prompt in AXIS_TO_PROMPTS[QueryAxis.MOOD])
 
     ranges = calibration_axis_ranges()
     ordered = list(ranges.values())
-    assert ordered[0][0] > 0  # readout vocabulary precedes axis references
+    assert ordered[0][0] == 0  # axis references are the complete calibration bank
     assert all(end - start == 32 for start, end in ordered)
     assert all(left[1] == right[0] for left, right in zip(ordered, ordered[1:], strict=False))
 

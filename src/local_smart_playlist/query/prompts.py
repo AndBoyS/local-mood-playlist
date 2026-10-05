@@ -10,9 +10,7 @@ import os
 import re
 import time
 from collections import Counter
-from pathlib import Path
 
-from local_smart_playlist.const import CAPTION_VOCAB_PATH
 from local_smart_playlist.query.axis_prompts import ALL_AXIS_PROMPTS, AXIS_TO_PROMPTS, QueryAxis
 from local_smart_playlist.type_utils import NonEmptyTuple
 
@@ -22,18 +20,9 @@ DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1"  # OpenCode Go subscription
 DEFAULT_MODEL = "deepseek-v4-flash"
 
 
-def read_prompt_bank(path: Path) -> NonEmptyTuple[str]:
-    """Read nonblank prompt lines, dropping `#` comments."""
-    prompt_text = path.read_text(encoding="utf-8")
-    return NonEmptyTuple(
-        line.strip() for line in prompt_text.splitlines() if line.strip() != "" and not line.lstrip().startswith("#")
-    )
-
-
-
 def calibration_axis_ranges() -> dict[QueryAxis, tuple[int, int]]:
     """Prompt-bank row ranges for each axis in ``calibration_prompt_bank``."""
-    offset = len(read_prompt_bank(CAPTION_VOCAB_PATH))
+    offset = 0
     ranges: dict[QueryAxis, tuple[int, int]] = {}
     for axis, prompts in AXIS_TO_PROMPTS.items():
         end = offset + len(prompts)
@@ -43,8 +32,8 @@ def calibration_axis_ranges() -> dict[QueryAxis, tuple[int, int]]:
 
 
 def calibration_prompt_bank() -> NonEmptyTuple[str]:
-    """Caption readout prompts plus balanced, axis-labelled references."""
-    return NonEmptyTuple((*read_prompt_bank(CAPTION_VOCAB_PATH), *ALL_AXIS_PROMPTS))
+    """Single-axis reference prompts used for text-query calibration."""
+    return ALL_AXIS_PROMPTS
 
 
 ADAPT_PROMPT = (
@@ -83,20 +72,6 @@ def _settings() -> tuple[str, str, str]:
     return base_url, model, api_key
 
 
-def _adapt_prompt() -> str:
-    """Add evenly spaced readout-caption examples as a model-specific style reference."""
-    vocab = read_prompt_bank(CAPTION_VOCAB_PATH)
-    count = min(12, len(vocab))
-    if count == 0:
-        return ADAPT_PROMPT
-    if count == 1:
-        examples = vocab
-    else:
-        indices = [i * (len(vocab) - 1) // (count - 1) for i in range(count)]
-        examples = [vocab[i] for i in indices]
-    return f"{ADAPT_PROMPT}\n\nReadout-caption style examples:\n" + "\n".join(examples)
-
-
 def adapt_mood(mood: str) -> list[str]:
     """Adapt *mood* into embedding-friendly query variants; raises LlmError on failure."""
     import uuid
@@ -110,7 +85,7 @@ def adapt_mood(mood: str) -> list[str]:
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": _adapt_prompt()},
+            {"role": "system", "content": ADAPT_PROMPT},
             {"role": "user", "content": f"Query: {mood}"},
         ],
         "temperature": 0.2,
