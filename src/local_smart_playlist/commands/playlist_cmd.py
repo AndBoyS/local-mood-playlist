@@ -14,7 +14,8 @@ from local_smart_playlist.query.playlist import playlist_path, write_playlist
 from local_smart_playlist.query.prompts import adapt_mood, calibration_prompt_bank, decompose_query_axes
 from local_smart_playlist.query.rank_text import axis_vector_banks, rank_text_components
 from local_smart_playlist.query.search import rank_by_similarity
-from local_smart_playlist.query.vocab_cal import VOCAB_SCORE_FLOOR, vocab_vector_bank_cached
+from local_smart_playlist.query.upper_cluster import UPPER_CLUSTER_NEUTRAL
+from local_smart_playlist.query.vocab_cal import vocab_vector_bank_cached
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class PlayArgs:
                 model = load_model(device="cpu", text_only=True)
                 vocab_vecs = vocab_vector_bank_cached(store, model, vocab=calibration_prompt_bank())
                 axis_vocab_vecs = axis_vector_banks(vocab_vecs)
-                cutoff = max(VOCAB_SCORE_FLOOR, min_score)
+                cutoff = max(UPPER_CLUSTER_NEUTRAL, min_score)
                 if llm:
                     decomposed = [(variant, decompose_query_axes(variant)) for variant in adapted]
                     print("LLM axis components:")
@@ -99,7 +100,7 @@ class PlayArgs:
                         axis_text = (
                             ", ".join(f"{axis.value}={component}" for axis, component in components.items())
                             if components is not None
-                            else "global fallback"
+                            else "mood-axis fallback"
                         )
                         print(f"  {variant} -> {axis_text}")
                 else:
@@ -110,7 +111,6 @@ class PlayArgs:
                         model,
                         query=variant,
                         components=components,
-                        vocab_vecs=vocab_vecs,
                         axis_vocab_vecs=axis_vocab_vecs,
                         min_score=cutoff,
                         k=store.track_count(),
@@ -124,17 +124,16 @@ class PlayArgs:
         if vacuum_recommended and vacuum_worker.start_background(db_path):
             logger.info("started background index vacuum; details: %s", f"{db_path}.vacuum.log")
 
-        cutoff = max(VOCAB_SCORE_FLOOR, min_score)
+        cutoff = max(UPPER_CLUSTER_NEUTRAL, min_score)
         if len(ranked) > 0:
-            # Calibrated score is absolute: 0.5 = typical reference fit, 0.9 = strict.
-            # Axis-aware score is weakest requested-axis fit; no best-relative cutoff.
+            # Cluster fit is neutral at 0.5; axis-aware score is weakest requested-axis fit.
             ranked = [(t, s) for t, s in ranked if s >= cutoff]
             if n is not None:
                 ranked = ranked[:n]
         if len(ranked) == 0:
             raise SystemExit(
-                f"no tracks passed the cutoff (effective {cutoff:.2f} = max({VOCAB_SCORE_FLOOR}, "
-                f"--min-score {min_score:.2f})); scores below {VOCAB_SCORE_FLOOR} are below "
+                f"no tracks passed the cutoff (effective {cutoff:.2f} = max({UPPER_CLUSTER_NEUTRAL}, "
+                f"--min-score {min_score:.2f})); scores below {UPPER_CLUSTER_NEUTRAL} are below "
                 "neutral by construction — lower --min-score toward 0.5 or refine the query"
             )
 

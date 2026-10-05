@@ -12,9 +12,9 @@ from shape_extensions import IntVar
 
 from local_smart_playlist.embed.model import MODEL_ID, cap_torch_threads, load_model
 from local_smart_playlist.index.store import Store, TrackData
+from local_smart_playlist.query.contrast import query_vector_contrast
 from local_smart_playlist.query.prompts import calibration_prompt_bank
-from local_smart_playlist.query.rank_text import axis_vector_banks, rank_text_components
-from local_smart_playlist.query.vocab_cal import VOCAB_SCORE_FLOOR, vocab_vector_bank
+from local_smart_playlist.query.vocab_cal import VOCAB_SCORE_FLOOR, rank_by_vocab_calibration, vocab_vector_bank
 
 PROBES: dict[str, list[str]] = {
     "dreamy, melancholic": ["To Far Shores", "The Terminal Show"],
@@ -44,18 +44,13 @@ def main() -> None:
         store.require_model(MODEL_ID)
         model = load_model()
         vocab_vecs = vocab_vector_bank(model, vocab)
-        axis_vecs = axis_vector_banks(vocab_vecs)
         print(f"# db={args.db}  vocab={len(vocab)}")
 
         for query, exemplars in probes.items():
-            ranked = rank_text_components(
+            ranked = rank_by_vocab_calibration(
                 store,
-                model,
-                query=query,
-                components=None,
+                query_vec=query_vector_contrast(query, model),
                 vocab_vecs=vocab_vecs,
-                axis_vocab_vecs=axis_vecs,
-                min_score=0.0,
                 k=store.track_count(),
             )
             total = len(ranked)

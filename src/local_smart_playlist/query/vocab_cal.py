@@ -1,15 +1,8 @@
-"""Reference-bank calibration rankers (CAF-Score style).
+"""Reference-bank embedding and legacy percentile calibration utilities.
 
-Each window's query affinity is measured by its percentile among that
-window's similarities to a reference bank. Recognized query components use
-same-axis banks; composite queries require every axis score to clear the
-cutoff. Unclassified queries retain the legacy global caption/reference bank.
-
-Track score per axis is the mean per-window percentile in [0, 1]. Composite
-rank score is the weakest requested-axis score. A score of 0.5 means the query
-fits as well as a typical anchor for the average window of that track.
-
-Ranking scans stored window vectors; no re-index needed.
+Production text ranking uses the adaptive upper-cluster scorer. Percentile
+scoring remains here for historical comparisons and evaluation. All rankers
+scan stored window vectors; no re-index needed.
 """
 
 import base64
@@ -25,6 +18,7 @@ from local_smart_playlist.embed.model import MODEL_ID, MuLanEmbedder
 from local_smart_playlist.index.store import BatchedVectors, MetaKey, Store, TrackData
 from local_smart_playlist.numpy_helpers import l2_normalize, reshape
 from local_smart_playlist.query.axis_prompts import QueryAxis
+from local_smart_playlist.query.upper_cluster import UPPER_CLUSTER_NEUTRAL, upper_cluster_fit_per_window
 from local_smart_playlist.type_utils import NonEmptyTuple
 
 W = IntVar("W")  # window count per track
@@ -32,10 +26,8 @@ N = IntVar("N")  # total window count in a flat scoring batch
 D = IntVar("D")  # embedding dim
 V = IntVar("V")  # vocab size
 
-# Cutoff floor in percentile space: 0.5 = query fits as well as a typical
-# caption. Scores are absolute (calibrated), so the CLI cutoff is an absolute
-# threshold too (min_score, default 0.9); the floor only blocks sub-neutral
-# values — nothing below neutral is accepted as an on-axis match.
+# Legacy percentile-space neutral floor. Production upper-cluster neutral is
+# defined in query/upper_cluster.py.
 VOCAB_SCORE_FLOOR = 0.5
 CALIBRATION_BATCH_TRACKS = 256
 # A window counts toward coverage when it beats more than half of caption prompts.
@@ -155,6 +147,71 @@ def _iter_calibration_batches[N2: IntVar, D2: IntVar](
         yield paths_batch, flat_vecs.vec_matrix[flat_id_start:flat_id_end], sizes_batch
         batch_start = batch_end
         flat_id_start = flat_id_end
+
+
+def rank_by_upper_cluster[D2: IntVar, V2: IntVar](
+    store: Store,
+    *,
+    query_vecs: dict[QueryAxis, np.ndarray[[D2]]],
+    anchor_vecs: dict[QueryAxis, np.ndarray[[V2, D2]]],
+    min_score: float,
+    k: int,
+    exclude: set[str] | None = None,
+) -> list[tuple[TrackData[D2], float]]:
+    """Rank tracks by query fit to each requested axis's upper anchor cluster.
+
+    Per-track query and anchor similarities are averaged over windows, matching
+    the production recipe evaluated in ``scripts/eval_softmax.py``. Composite
+    queries pass only when every axis clears ``min_score``; their weakest-axis
+    fit determines rank, with mean query similarity and path as tie-breaks.
+    """
+    if len(query_vecs) == 0 or query_vecs.keys() != anchor_vecs.keys():
+        raise ValueError("query vectors and anchor banks must have identical, non-empty axes")
+    if any(bank.shape[0] == 0 for bank in anchor_vecs.values()):
+        raise ValueError("each requested axis needs a non-empty anchor bank")
+
+    excluded = set() if exclude is None else set(exclude)
+    flat_vecs = store.load_windows_flat(store.track_rel_paths())
+    path_data = {track.rel_path: track for track in store.track_meta()}
+    scored: list[tuple[TrackData[D2], float, float, float, str]] = []
+
+    for paths_batch, windows, sizes_batch in _iter_calibration_batches(flat_vecs):
+        starts = np.cumsum([0, *sizes_batch[:-1]]).tolist()
+        ends = np.cumsum(sizes_batch).tolist()
+        fits_by_axis: dict[QueryAxis, list[float]] = {}
+        query_means_by_axis: dict[QueryAxis, list[float]] = {}
+        for axis, query_vec in query_vecs.items():
+            query_sims = np.asarray(windows @ query_vec, dtype=np.float64).ravel()
+            anchor_sims = np.asarray(windows @ anchor_vecs[axis].T, dtype=np.float64)
+            query_means = [float(query_sims[start:end].mean()) for start, end in zip(starts, ends, strict=True)]
+            anchor_means = [
+                anchor_sims[start:end].mean(axis=0) for start, end in zip(starts, ends, strict=True)
+            ]
+            fit_values = upper_cluster_fit_per_window(
+                np.asarray(query_means, dtype=np.float64),
+                np.stack(anchor_means),
+            )
+            fits_by_axis[axis] = fit_values.tolist()
+            query_means_by_axis[axis] = query_means
+
+        for index, path in enumerate(paths_batch):
+            track = path_data.get(path)
+            if path in excluded or track is None:
+                continue
+            axis_scores = [fits[index] for fits in fits_by_axis.values()]
+            weakest_score = min(axis_scores)
+            passes_cutoff = (
+                weakest_score > UPPER_CLUSTER_NEUTRAL
+                if min_score == UPPER_CLUSTER_NEUTRAL
+                else weakest_score >= min_score
+            )
+            if passes_cutoff:
+                mean_score = sum(axis_scores) / len(axis_scores)
+                mean_query = sum(means[index] for means in query_means_by_axis.values()) / len(axis_scores)
+                scored.append((track, weakest_score, mean_score, mean_query, path))
+
+    scored.sort(key=lambda entry: (-entry[1], -entry[2], -entry[3], entry[4]))
+    return [(track, score) for track, score, _mean_score, _query_mean, _path in scored[:k]]
 
 
 def rank_by_vocab_calibration(

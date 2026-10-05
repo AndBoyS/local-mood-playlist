@@ -37,7 +37,7 @@ class PlayArgs(tap.TypedArgs):
     )
     min_score: float = tap.arg(
         default=0.9,
-        help="Absolute calibrated cutoff in [0.5, 1): every recognized query axis must clear it "
+        help="Upper-cluster fit cutoff in [0.5, 1): every recognized query axis must clear it "
         "(default 0.9; 0.5 is neutral)",
     )
     dry: bool = tap.arg(help="Print the result without writing a playlist")

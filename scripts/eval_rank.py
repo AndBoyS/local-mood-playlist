@@ -1,9 +1,7 @@
 """Offline ranking eval: probe queries x exemplar tracks over the live index.
 
-Measures where known soft/dense exemplar tracks rank under the offline
-global-bank calibration baseline, plus a top-k preview, so ranker experiments (difficulties.md
-§1, §6) can be compared without listening. Read-only: never writes the DB or
-playlists.
+Measures exemplar ranks under the production upper-cluster scorer, plus a
+top-k preview. Read-only: never writes the DB or playlists.
 
 Usage:
     uv run python scripts/eval_rank.py                  # default probes
@@ -19,7 +17,8 @@ from local_smart_playlist.embed.model import MODEL_ID, MuLanEmbedder, cap_torch_
 from local_smart_playlist.index.store import Store, TrackData
 from local_smart_playlist.query.prompts import calibration_prompt_bank
 from local_smart_playlist.query.rank_text import axis_vector_banks, rank_text_components
-from local_smart_playlist.query.vocab_cal import VOCAB_SCORE_FLOOR, vocab_vector_bank
+from local_smart_playlist.query.upper_cluster import UPPER_CLUSTER_NEUTRAL
+from local_smart_playlist.query.vocab_cal import vocab_vector_bank
 
 # Probe query -> case-insensitive substrings of exemplar tracks (rel_path or
 # title). Soft/dense exemplars from difficulties.md §1 measurements.
@@ -30,20 +29,19 @@ PROBES: dict[str, list[str]] = {
 }
 PREVIEW_COUNT = 5
 PERCENTILE_SCALE = 100.0
-DEFAULT_MIN_SCORE = 0.9  # sp play --min-score default; kept = score >= max(VOCAB_SCORE_FLOOR, this)
+DEFAULT_MIN_SCORE = 0.9  # sp play --min-score default; kept = score >= max(UPPER_CLUSTER_NEUTRAL, this)
 
 
 def rank_full[D: IntVar](
     store: Store, model: MuLanEmbedder[D], *, query: str
 ) -> list[tuple[TrackData[D], float]]:
-    """Full-library ranking with offline global-bank calibration fallback."""
+    """Full-library ranking with the production upper-cluster scorer."""
     vocab_vecs = vocab_vector_bank(model, calibration_prompt_bank())
     ranked = rank_text_components(
         store,
         model,
         query=query,
         components=None,
-        vocab_vecs=vocab_vecs,
         axis_vocab_vecs=axis_vector_banks(vocab_vecs),
         min_score=0.0,
         k=store.track_count(),
@@ -65,7 +63,7 @@ def report[D: IntVar](ranked: list[tuple[TrackData[D], float]], *, query: str, e
             continue
         rank0, score = hit
         pct = rank0 / total * PERCENTILE_SCALE if total > 0 else 0.0
-        kept = score >= max(VOCAB_SCORE_FLOOR, DEFAULT_MIN_SCORE)
+        kept = score >= max(UPPER_CLUSTER_NEUTRAL, DEFAULT_MIN_SCORE)
         print(
             f"   exemplar {needle!r}: rank {rank0 + 1}/{total}"
             f" ({pct:.1f}% from top)  score {score:.3f}  kept={kept}"

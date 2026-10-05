@@ -17,8 +17,8 @@ uv run sp status
 - CLI binary: `sp`
 - `sp index <root> [--rescan] [--quiet] [--db PATH]`
 - `sp play "<query>" [-n 30] [-o out.m3u8|-] [--llm] [--seed-track PATH] [--dry] [--min-score 0.75]`
-- `--min-score` is an absolute calibrated cutoff (default 0.9; floor 0.5). With `--llm`, every decomposed query axis must clear it.
-- `uv run python scripts/eval_rank.py` — offline global-bank baseline eval over the live index (no LLM calls, no playlist written; historical measurements in `difficulties.md`)
+- `--min-score` is an upper-cluster fit cutoff (default 0.9; floor 0.5 neutral). With `--llm`, every decomposed query axis must clear it.
+- `uv run python scripts/eval_rank.py` — production upper-cluster ranking probe over the live index (no playlist written)
 - `sp status [--db PATH]`
 - `sp describe PATH [-n 10] [--db PATH]` — top caption-vocab neighbors for an indexed track (offline; no LLM; diagnostics only)
 
@@ -27,17 +27,17 @@ paths relative to the playlist file, so they stay portable across synced
 copies of the library (e.g. Dropbox → Android via FolderSync, consumed by
 AIMP). Use `-o` for a custom destination, `-o -` to print the m3u8 to stdout.
 
-With `--llm`, each adapted query is decomposed into axis-labelled components.
-Each 10 s window gets a percentile per component, comparing
-`cos(window, component)` only with that axis's 32 reference prompts. Track
-score per axis is the mean per-window percentile; a query passes only when
-**every** component reaches `--min-score`. Results rank by weakest-axis score,
-so a strong instrument match cannot offset a weak mood match. Axes cover mood,
+Text queries rank by adaptive upper-cluster fit against axis reference prompts.
+For each track, query and anchor similarities are averaged across stored windows;
+the scorer separates the top anchor cluster from lower anchors and maps relative
+fit to [0, 1]. A score above 0.5 favors the upper cluster. Without `--llm`,
+the query uses mood anchors, matching the evaluated production recipe. With
+`--llm`, each adapted query is decomposed into axis-labelled components and
+scored against that axis's 32 prompts; every component must clear
+`--min-score`, and weakest-axis fit determines rank. Axes cover mood,
 genre/style, instruments/sources, vocals, tempo/rhythm, arrangement/dynamics,
-timbre/production, and recording/context. Without `--llm`, queries use legacy
-calibration against the full caption/reference bank; no local axis classifier
-runs. Full-library scan uses stored windows; tracks without them must be
-re-indexed. A score of 0.5 is neutral against its reference bank.
+timbre/production, and recording/context. Full-library scan uses stored
+windows; tracks without them must be re-indexed.
 
 `--seed-track` uses two-stage audio ranking:
 exact NumPy track-mean cosine prefilter, then peak-window rescore. Seed score =
