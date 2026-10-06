@@ -223,14 +223,18 @@ def test_adapt_mood_logs_correction(monkeypatch: Any, caplog: Any) -> None:
 
     def fake_post(url: str, **kwargs: Any) -> Any:
         messages = kwargs["json"]["messages"]
-        assert messages[0]["content"] == prompts.ADAPT_PROMPT
+        system_prompt = messages[0]["content"]
+        assert system_prompt == prompts.ADAPT_PROMPT
+        assert "there is no fixed count" in system_prompt
+        assert "Keep each alternative to 1 or 2 broad attributes" in system_prompt
+        assert "do not add 'instrumental', 'slow', 'repetitive', or 'sparse'" in system_prompt
         return SimpleNamespace(
             raise_for_status=lambda: None,
             json=lambda: {
                 "choices": [
                     {
                         "message": {
-                            "content": "1. energetic mood, driving beat.\n2. upbeat mood, danceable rhythm.\n3. focused mood, steady tempo.\n4. intense mood, fast pulse."
+                            "content": "1. melancholic, subdued.\n2. wistful, calm.\n3. quiet, reflective."
                         }
                     }
                 ]
@@ -242,12 +246,7 @@ def test_adapt_mood_logs_correction(monkeypatch: Any, caplog: Any) -> None:
     monkeypatch.setattr(httpx, "post", fake_post)
     with caplog.at_level(logging.INFO, logger="local_smart_playlist.query.prompts"):
         result = prompts.adapt_mood("sad rainy morning")
-    assert result == [
-        "energetic mood, driving beat.",
-        "upbeat mood, danceable rhythm.",
-        "focused mood, steady tempo.",
-        "intense mood, fast pulse.",
-    ]
+    assert result == ["melancholic, subdued.", "wistful, calm.", "quiet, reflective."]
     record = next(r for r in caplog.records if "llm adapt:" in r.message)
     assert "sad rainy morning" in record.message
-    assert "energetic mood, driving beat." in record.message
+    assert "melancholic, subdued." in record.message
