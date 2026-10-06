@@ -74,7 +74,9 @@ def test_play_starts_vacuum_after_closing_store(monkeypatch: pytest.MonkeyPatch,
     store.vacuum_if_needed.assert_called_once_with(execute=False)
 
 
-def test_play_decomposes_each_llm_variant_before_ranking(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_play_decomposes_each_llm_variant_before_ranking(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     from local_smart_playlist.query.axis_prompts import QueryAxis
 
     db = tmp_path / "index.db"
@@ -123,6 +125,10 @@ def test_play_decomposes_each_llm_variant_before_ranking(monkeypatch: pytest.Mon
     assert [call.args[0] for call in decompose.call_args_list] == variants
     assert [call.kwargs["components"] for call in rank.call_args_list] == decompositions
     assert rank.call_count == len(variants)
+    output = capsys.readouterr().out
+    assert "LLM query variants:\n  1. sad piano\n  2. dreamy jazz" in output
+    assert "  sad piano -> mood: sad, instrument: piano" in output
+    assert "  dreamy jazz -> mood: dreamy, genre: jazz" in output
 
 
 def test_play_crashes_when_llm_adaptation_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

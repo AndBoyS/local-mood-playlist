@@ -54,10 +54,12 @@ pages when vacuum threshold is not met.
 LLM query adaptation (`--llm`) uses any OpenAI-compatible endpoint. For free
 text, the first LLM step generates distinct MuQ-MuLan-style attribute-query
 variants using readout-caption examples. A second LLM step decomposes **each
-variant** into axis-labelled components before ranking; CLI shows both stages.
-Each variant ranks tracks separately and must pass every axis gate; results
+variant** into axis-labelled components before ranking. Each variant ranks tracks
+separately and must pass every axis gate; results
 are unioned by track using its highest weakest-axis score. Already-comma-separated
 attribute lists pass through as one variant, then still receive axis decomposition.
+LLM query variants and axis mappings print as command output. HTTP request
+details stay hidden unless `SP_LOG_LEVEL=DEBUG`.
 Variants infer qualities implied by intent but avoid inventing specific
 instruments, genres, or vocal styles. Add situation details with `--context`,
 for example `sp play "something calm" --llm --context "for reading before bed"`.

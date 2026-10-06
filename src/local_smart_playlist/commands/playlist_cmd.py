@@ -87,21 +87,21 @@ class PlayArgs:
                 adapted = [query]
                 if llm:
                     adapted = adapt_mood(query, context=context) if context is not None else adapt_mood(query)
-                    print("LLM queries:")
-                    for variant in adapted:
-                        print(f"  - {variant}")
+                    print("LLM query variants:")
+                    for index, variant in enumerate(adapted, start=1):
+                        print(f"  {index}. {variant}")
                 model = load_model(device="cpu", text_only=True)
                 vocab_vecs = vocab_vector_bank_cached(store, model, vocab=calibration_prompt_bank())
                 axis_vocab_vecs = axis_vector_banks(vocab_vecs)
                 cutoff = max(UPPER_CLUSTER_NEUTRAL, min_score)
                 if llm:
                     decomposed = [(variant, decompose_query_axes(variant)) for variant in adapted]
-                    print("LLM axis components:")
+                    print("LLM axis mappings:")
                     for variant, components in decomposed:
                         axis_text = (
-                            ", ".join(f"{axis.value}={component}" for axis, component in components.items())
+                            ", ".join(f"{axis.value}: {component}" for axis, component in components.items())
                             if components is not None
-                            else "mood-axis fallback"
+                            else "mood fallback"
                         )
                         print(f"  {variant} -> {axis_text}")
                 else:

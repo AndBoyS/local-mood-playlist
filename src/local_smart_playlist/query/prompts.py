@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import re
-import time
 from collections import Counter
 
 from local_smart_playlist.query.axis_prompts import ALL_AXIS_PROMPTS, AXIS_TO_PROMPTS, QueryAxis
@@ -103,7 +102,6 @@ def adapt_mood(mood: str, *, context: str | None = None) -> list[str]:
         "temperature": 0.2,
     }
     try:
-        started = time.perf_counter()
         resp = httpx.post(f"{base_url.rstrip('/')}/chat/completions", json=body, headers=headers, timeout=60.0)
         _ = resp.raise_for_status()
         payload = resp.json()
@@ -119,8 +117,6 @@ def adapt_mood(mood: str, *, context: str | None = None) -> list[str]:
     if len(lines) == 0:
         logger.warning("llm adapt returned no text for %r via %s/%s", mood, base_url, model)
         raise LlmError("LLM adaptation returned no text")
-    elapsed_ms = (time.perf_counter() - started) * 1000.0
-    logger.info("llm adapt: %r -> %r (%s, %.0f ms)", mood, lines, model, elapsed_ms)
     return lines
 
 
@@ -154,7 +150,6 @@ def decompose_query_axes(query: str) -> dict[QueryAxis, str] | None:
         "temperature": 0.0,
     }
     try:
-        started = time.perf_counter()
         resp = httpx.post(f"{base_url.rstrip('/')}/chat/completions", json=body, headers=headers, timeout=60.0)
         _ = resp.raise_for_status()
         payload = resp.json()
@@ -190,6 +185,4 @@ def decompose_query_axes(query: str) -> dict[QueryAxis, str] | None:
                 raise LlmError(f"LLM axis decomposition invented terms for {axis.value!r}")
             components[axis] = component
 
-    elapsed_ms = (time.perf_counter() - started) * 1000.0
-    logger.info("llm axis decomposition: %r -> %r (%s, %.0f ms)", query, components, model, elapsed_ms)
     return components if len(components) > 0 else None

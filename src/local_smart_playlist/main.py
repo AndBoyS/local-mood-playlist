@@ -88,6 +88,7 @@ class StatusArgs(tap.TypedArgs):
 def main() -> None:
     level = os.environ.get("SP_LOG_LEVEL", "INFO").upper()
     logging.basicConfig(level=level, format="%(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.DEBUG if level == "DEBUG" else logging.WARNING)
     parser = tap.Parser(
         tap.SubParserGroup(
             tap.SubParser("index", IndexArgs, help="Index a music library"),
