@@ -3,6 +3,9 @@
 import json
 import logging
 import os
+import warnings
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Protocol, overload
 
@@ -23,6 +26,13 @@ W24 = IntVar("W24")  # samples per window after resample to 24 kHz
 MODEL_ID = "OpenMuQ/MuQ-MuLan-large"
 EMBED_DIM = 512
 MODEL_SR = 24_000  # MuQ-MuLan strictly requires 24 kHz input
+
+
+@contextmanager
+def _ignore_weight_norm_deprecation() -> Generator[None]:
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=r"(?i).*weight[_ ]?norm.*deprecated.*", category=Warning)
+        yield
 
 
 def pick_device() -> str:
@@ -76,7 +86,7 @@ class MuLanEmbedder[D: IntVar]:
         """Embed non-empty text prompts; returns (n_texts, dim), L2-normalized."""
         import torch
 
-        with torch.no_grad():
+        with _ignore_weight_norm_deprecation(), torch.no_grad():
             raw = torch_to_numpy(self.model(texts=list(texts)))
         return l2_normalize(raw)
 
@@ -88,7 +98,7 @@ class MuLanEmbedder[D: IntVar]:
 
         device = pick_device()
         out = np.empty((len(windows), self.dim), dtype=np.float32)
-        with torch.no_grad():
+        with _ignore_weight_norm_deprecation(), torch.no_grad():
             for i, batch in enumerate(batches(windows, batch_size=batch_size)):
                 wavs_24k = _to_24k(batch)
                 wavs = torch.tensor(np.stack(wavs_24k), dtype=torch.float32, device=device)
@@ -293,8 +303,9 @@ def load_model(*, device: str | None = None, text_only: bool = False) -> MuLanEm
     snapshot = _snapshot_dir(MODEL_ID)
     if snapshot is not None and _hub_submodels_cached(snapshot, text_only=text_only):
         _ = os.environ.setdefault("HF_HUB_OFFLINE", "1")
-    model = _load_weights(snapshot, text_only=text_only)
-    _ = model.to(device if device is not None else pick_device())
+    with _ignore_weight_norm_deprecation():
+        model = _load_weights(snapshot, text_only=text_only)
+        _ = model.to(device if device is not None else pick_device())
     return MuLanEmbedder(model, dim=EMBED_DIM)
 
 
