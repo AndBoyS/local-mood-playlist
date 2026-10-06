@@ -53,6 +53,7 @@ class PlayArgs:
         alpha: float,
         min_score: float,
         dry: bool,
+        context: str | None = None,
     ) -> None:
         cap_torch_threads()
         db_path = db if db is not None else default_db_path()
@@ -85,7 +86,7 @@ class PlayArgs:
                     print("note: --alpha ignored (applies only with --seed-track)")
                 adapted = [query]
                 if llm:
-                    adapted = adapt_mood(query)
+                    adapted = adapt_mood(query, context=context) if context is not None else adapt_mood(query)
                     print("LLM queries:")
                     for variant in adapted:
                         print(f"  - {variant}")

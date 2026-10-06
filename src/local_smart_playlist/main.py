@@ -28,6 +28,9 @@ class PlayArgs(tap.TypedArgs):
     llm: bool = tap.arg(
         help="Generate query variants, then decompose each into musical axes with an LLM before embedding"
     )
+    context: str | None = tap.arg(
+        default=None, help="Additional context for LLM query adaptation (used with --llm)"
+    )
     seed_track: str | None = tap.arg(
         default=None, metavar="PATH", help="Use a track's vector as the query instead of text"
     )
@@ -52,6 +55,7 @@ class PlayArgs(tap.TypedArgs):
             n=self.n,
             out=self.out,
             llm=self.llm,
+            context=self.context,
             seed_track=self.seed_track,
             alpha=self.alpha,
             min_score=self.min_score,

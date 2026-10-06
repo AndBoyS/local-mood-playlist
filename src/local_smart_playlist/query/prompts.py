@@ -39,6 +39,8 @@ def calibration_prompt_bank() -> NonEmptyTuple[str]:
 ADAPT_PROMPT = (
     "You adapt a user's music request for MuQ-MuLan, a music-text embedding "
     "model whose captions use short, comma-separated lowercase attributes.\n\n"
+    "A separate user message may provide supplementary Context; use it to "
+    "interpret the query's intent, without replacing or contradicting the query.\n\n"
     "For an input that is already a comma-separated attribute list (e.g. "
     "'dreamy, melancholic'), return exactly one line, unchanged except for "
     "translation or typo fixes. Never expand or reorder it.\n\n"
@@ -79,7 +81,7 @@ def _settings() -> tuple[str, str, str]:
     return base_url, model, api_key
 
 
-def adapt_mood(mood: str) -> list[str]:
+def adapt_mood(mood: str, *, context: str | None = None) -> list[str]:
     """Adapt *mood* into embedding-friendly query variants; raises LlmError on failure."""
     import uuid
 
@@ -89,12 +91,15 @@ def adapt_mood(mood: str) -> list[str]:
     headers = {"x-opencode-session": uuid.uuid4().hex}
     if api_key != "":
         headers["Authorization"] = f"Bearer {api_key}"
+    messages = [
+        {"role": "system", "content": ADAPT_PROMPT},
+        {"role": "user", "content": f"Query: {mood}"},
+    ]
+    if context is not None:
+        messages.append({"role": "user", "content": f"Context: {context}"})
     body = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": ADAPT_PROMPT},
-            {"role": "user", "content": f"Query: {mood}"},
-        ],
+        "messages": messages,
         "temperature": 0.2,
     }
     try:

@@ -225,6 +225,8 @@ def test_adapt_mood_logs_correction(monkeypatch: Any, caplog: Any) -> None:
         messages = kwargs["json"]["messages"]
         system_prompt = messages[0]["content"]
         assert system_prompt == prompts.ADAPT_PROMPT
+        assert messages[1] == {"role": "user", "content": "Query: sad rainy morning"}
+        assert messages[2] == {"role": "user", "content": "Context: for reading before bed"}
         assert "there is no fixed count" in system_prompt
         assert "Keep each alternative to 1 or 2 broad attributes" in system_prompt
         assert "do not add 'instrumental', 'slow', 'repetitive', or 'sparse'" in system_prompt
@@ -245,7 +247,7 @@ def test_adapt_mood_logs_correction(monkeypatch: Any, caplog: Any) -> None:
 
     monkeypatch.setattr(httpx, "post", fake_post)
     with caplog.at_level(logging.INFO, logger="local_smart_playlist.query.prompts"):
-        result = prompts.adapt_mood("sad rainy morning")
+        result = prompts.adapt_mood("sad rainy morning", context="for reading before bed")
     assert result == ["melancholic, subdued.", "wistful, calm.", "quiet, reflective."]
     record = next(r for r in caplog.records if "llm adapt:" in r.message)
     assert "sad rainy morning" in record.message

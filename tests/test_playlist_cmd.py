@@ -101,7 +101,8 @@ def test_play_decomposes_each_llm_variant_before_ranking(monkeypatch: pytest.Mon
     monkeypatch.setattr(playlist_cmd, "load_model", MagicMock(return_value=MagicMock()))
     monkeypatch.setattr(playlist_cmd, "vocab_vector_bank_cached", MagicMock(return_value=object()))
     monkeypatch.setattr(playlist_cmd, "axis_vector_banks", MagicMock(return_value={}))
-    monkeypatch.setattr(playlist_cmd, "adapt_mood", MagicMock(return_value=variants))
+    adapt = MagicMock(return_value=variants)
+    monkeypatch.setattr(playlist_cmd, "adapt_mood", adapt)
     monkeypatch.setattr(playlist_cmd, "decompose_query_axes", decompose)
     monkeypatch.setattr(playlist_cmd, "rank_text_components", rank)
 
@@ -111,12 +112,14 @@ def test_play_decomposes_each_llm_variant_before_ranking(monkeypatch: pytest.Mon
         n=None,
         out=None,
         llm=True,
+        context="for reading",
         seed_track=None,
         alpha=playlist_cmd.PLAY_DEFAULT_ALPHA,
         min_score=0.9,
         dry=True,
     )
 
+    adapt.assert_called_once_with("a sad piano tune", context="for reading")
     assert [call.args[0] for call in decompose.call_args_list] == variants
     assert [call.kwargs["components"] for call in rank.call_args_list] == decompositions
     assert rank.call_count == len(variants)

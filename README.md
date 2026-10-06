@@ -16,7 +16,8 @@ uv run sp status
 
 - CLI binary: `sp`
 - `sp index <root> [--rescan] [--quiet] [--db PATH]`
-- `sp play "<query>" [-n 30] [-o out.m3u8|-] [--llm] [--seed-track PATH] [--dry] [--min-score 0.75]`
+- `sp play "<query>" [-n 30] [-o out.m3u8|-] [--llm] [--context TEXT] [--seed-track PATH] [--dry] [--min-score 0.75]`
+- `--context` adds supplementary context to the LLM adaptation message; used with `--llm`.
 - `--min-score` is an upper-cluster fit cutoff (default 0.9; floor 0.5 neutral). With `--llm`, every decomposed query axis must clear it.
 - `uv run python scripts/eval_rank.py` — production upper-cluster ranking probe over the live index (no playlist written)
 - `sp status [--db PATH]`
@@ -58,7 +59,9 @@ Each variant ranks tracks separately and must pass every axis gate; results
 are unioned by track using its highest weakest-axis score. Already-comma-separated
 attribute lists pass through as one variant, then still receive axis decomposition.
 Variants infer qualities implied by intent but avoid inventing specific
-instruments, genres, or vocal styles. Recognized components are
+instruments, genres, or vocal styles. Add situation details with `--context`,
+for example `sp play "something calm" --llm --context "for reading before bed"`.
+Recognized components are
 axis-gated; if results feel too narrow, lower `--min-score` toward 0.5 or
 refine the original request. A failed LLM call shows and uses the raw phrase:
 
