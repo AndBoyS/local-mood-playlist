@@ -18,7 +18,7 @@ uv run sp status
 - `sp index <root> [--rescan] [--quiet] [--db PATH]`
 - `sp play "<query>" [-n 30] [-o out.m3u8|-] [--llm] [--context TEXT] [--seed-track PATH] [--dry] [--min-score 0.75]`
 - `--context` adds supplementary context to the LLM adaptation message; used with `--llm`.
-- `--min-score` is an upper-cluster fit cutoff (default 0.9; floor 0.5 neutral). With `--llm`, every decomposed query axis must clear it.
+- `--min-score` is an upper-cluster fit cutoff in `[0, 1)` (default 0.9; 0.5 is neutral). Lower values include below-neutral tracks; `--min-score 0` ranks every track with stored vectors.
 - `uv run python scripts/eval_rank.py` — production upper-cluster ranking probe over the live index (no playlist written)
 - `sp status [--db PATH]`
 - `sp describe PATH [-n 3] [--db PATH]` — top prompt matches within each attribute axis for an indexed track (ranked independently; offline; no LLM; `-n` sets matches per axis)

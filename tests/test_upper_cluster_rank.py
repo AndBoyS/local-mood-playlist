@@ -84,6 +84,23 @@ def test_cluster_rank_rejects_query_closer_to_lower_cluster(tmp_path: Path) -> N
     assert ranked == []
 
 
+def test_cluster_rank_includes_below_neutral_tracks_at_lower_cutoff(tmp_path: Path) -> None:
+    store = Store(tmp_path / "rank.db", embed_dim=DIM)
+    add_track(store, "low-fit.mp3", 0.1)
+
+    ranked = rank_by_upper_cluster(
+        store,
+        query_vecs={QueryAxis.MOOD: basis(0)},
+        anchor_vecs={QueryAxis.MOOD: anchor_bank()},
+        min_score=0.0,
+        k=1,
+    )
+
+    assert len(ranked) == 1
+    assert ranked[0][0].rel_path == "low-fit.mp3"
+    assert ranked[0][1] < 0.5
+
+
 def test_cluster_rank_excludes_neutral_tie_at_floor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = Store(tmp_path / "rank.db", embed_dim=DIM)
     add_track(store, "neutral.mp3", 0.4)

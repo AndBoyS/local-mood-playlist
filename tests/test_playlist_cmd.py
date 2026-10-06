@@ -127,8 +127,63 @@ def test_play_decomposes_each_llm_variant_before_ranking(
     assert rank.call_count == len(variants)
     output = capsys.readouterr().out
     assert "LLM query variants:\n  1. sad piano\n  2. dreamy jazz" in output
-    assert "  sad piano -> mood: sad, instrument: piano" in output
-    assert "  dreamy jazz -> mood: dreamy, genre: jazz" in output
+    assert "  sad piano -> mood: sad, instruments/sources: piano" in output
+    assert "  dreamy jazz -> mood: dreamy, genre/style: jazz" in output
+
+
+def test_play_allows_min_score_below_neutral(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "index.db"
+    db.touch()
+    store = MagicMock()
+    store.__enter__.return_value = store
+    store.get_meta.return_value = str(tmp_path)
+    store.track_count.return_value = 1
+    store.vacuum_if_needed.return_value.recommended = False
+    track = TrackData(rel_path="weak.mp3", title="weak", duration=60.0)
+    rank = MagicMock(return_value=[(track, 0.4)])
+
+    def make_store(_db: Path) -> MagicMock:
+        return store
+
+    monkeypatch.setattr(playlist_cmd, "cap_torch_threads", lambda: None)
+    monkeypatch.setattr(playlist_cmd, "Store", make_store)
+    monkeypatch.setattr(playlist_cmd, "load_model", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(playlist_cmd, "vocab_vector_bank_cached", MagicMock(return_value=object()))
+    monkeypatch.setattr(playlist_cmd, "axis_vector_banks", MagicMock(return_value={}))
+    monkeypatch.setattr(playlist_cmd, "rank_text_components", rank)
+
+    playlist_cmd.PlayArgs.run(
+        query="dreamy",
+        db=db,
+        n=None,
+        out=None,
+        llm=False,
+        seed_track=None,
+        alpha=playlist_cmd.PLAY_DEFAULT_ALPHA,
+        min_score=0.3,
+        dry=True,
+    )
+
+    assert rank.call_args.kwargs["min_score"] == 0.3
+    assert "0.400" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("min_score", [-0.1, 1.0])
+def test_play_rejects_min_score_outside_range(min_score: float, tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="min score must be in"):
+        playlist_cmd.PlayArgs.run(
+            query="dreamy",
+            db=tmp_path / "missing.db",
+            n=None,
+            out=None,
+            llm=False,
+            seed_track=None,
+            alpha=playlist_cmd.PLAY_DEFAULT_ALPHA,
+            min_score=min_score,
+            dry=True,
+        )
 
 
 def test_play_crashes_when_llm_adaptation_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

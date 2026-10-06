@@ -14,7 +14,6 @@ from local_smart_playlist.query.playlist import playlist_path, write_playlist
 from local_smart_playlist.query.prompts import adapt_mood, calibration_prompt_bank, decompose_query_axes
 from local_smart_playlist.query.rank_text import axis_vector_banks, rank_text_components
 from local_smart_playlist.query.search import rank_by_similarity
-from local_smart_playlist.query.upper_cluster import UPPER_CLUSTER_NEUTRAL
 from local_smart_playlist.query.vocab_cal import vocab_vector_bank_cached
 
 logger = logging.getLogger(__name__)
@@ -55,6 +54,8 @@ class PlayArgs:
         dry: bool,
         context: str | None = None,
     ) -> None:
+        if not 0.0 <= min_score < 1.0:
+            raise SystemExit("min score must be in [0, 1)")
         cap_torch_threads()
         db_path = db if db is not None else default_db_path()
         if not db_path.is_file():
@@ -93,7 +94,6 @@ class PlayArgs:
                 model = load_model(device="cpu", text_only=True)
                 vocab_vecs = vocab_vector_bank_cached(store, model, vocab=calibration_prompt_bank())
                 axis_vocab_vecs = axis_vector_banks(vocab_vecs)
-                cutoff = max(UPPER_CLUSTER_NEUTRAL, min_score)
                 if llm:
                     decomposed = [(variant, decompose_query_axes(variant)) for variant in adapted]
                     print("LLM axis mappings:")
@@ -113,7 +113,7 @@ class PlayArgs:
                         query=variant,
                         components=components,
                         axis_vocab_vecs=axis_vocab_vecs,
-                        min_score=cutoff,
+                        min_score=min_score,
                         k=store.track_count(),
                         exclude=exclude,
                     )
@@ -125,17 +125,15 @@ class PlayArgs:
         if vacuum_recommended and vacuum_worker.start_background(db_path):
             logger.info("started background index vacuum; details: %s", f"{db_path}.vacuum.log")
 
-        cutoff = max(UPPER_CLUSTER_NEUTRAL, min_score)
         if len(ranked) > 0:
             # Cluster fit is neutral at 0.5; axis-aware score is weakest requested-axis fit.
-            ranked = [(t, s) for t, s in ranked if s >= cutoff]
+            ranked = [(t, s) for t, s in ranked if s >= min_score]
             if n is not None:
                 ranked = ranked[:n]
         if len(ranked) == 0:
             raise SystemExit(
-                f"no tracks passed the cutoff (effective {cutoff:.2f} = max({UPPER_CLUSTER_NEUTRAL}, "
-                f"--min-score {min_score:.2f})); scores below {UPPER_CLUSTER_NEUTRAL} are below "
-                "neutral by construction — lower --min-score toward 0.5 or refine the query"
+                f"no tracks passed the cutoff (--min-score {min_score:.2f}); "
+                "lower --min-score toward 0 or refine the query"
             )
 
         root = Path(library_root) if library_root is not None else Path.cwd()

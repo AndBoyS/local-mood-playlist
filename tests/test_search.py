@@ -216,8 +216,8 @@ def test_decompose_query_axes_rejects_invented_terms(monkeypatch: Any) -> None:
         _ = prompts.decompose_query_axes("sad piano")
 
 
-def test_adapt_mood_logs_correction(monkeypatch: Any, caplog: Any) -> None:
-    """Successful correction logs input -> output at INFO."""
+def test_adapt_mood_does_not_log_successful_correction(monkeypatch: Any, caplog: Any) -> None:
+    """Successful corrections return to the CLI, avoiding duplicate INFO output."""
     import logging
     from types import SimpleNamespace
 
@@ -249,6 +249,4 @@ def test_adapt_mood_logs_correction(monkeypatch: Any, caplog: Any) -> None:
     with caplog.at_level(logging.INFO, logger="local_smart_playlist.query.prompts"):
         result = prompts.adapt_mood("sad rainy morning", context="for reading before bed")
     assert result == ["melancholic, subdued.", "wistful, calm.", "quiet, reflective."]
-    record = next(r for r in caplog.records if "llm adapt:" in r.message)
-    assert "sad rainy morning" in record.message
-    assert "melancholic, subdued." in record.message
+    assert not any("llm adapt:" in record.message for record in caplog.records)
