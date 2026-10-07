@@ -1,107 +1,159 @@
-"""`sp` CLI entry point."""
+"""CLI shell for fixed-vocabulary mood playlists."""
 
-import logging
-import os
-from pathlib import Path
+import sys
+from enum import StrEnum
 
+import questionary
 import typed_argparse as tap
 
-from local_smart_playlist.commands import describe_cmd, index_cmd, playlist_cmd, status_cmd
+
+class Mood(StrEnum):
+    CALM = "calm"
+    DARK = "dark"
+    DREAMY = "dreamy"
+    EMOTIONAL = "emotional"
+    ENERGETIC = "energetic"
+    HAPPY = "happy"
+    HOPEFUL = "hopeful"
+    MELANCHOLIC = "melancholic"
+    MEDITATIVE = "meditative"
+    POSITIVE = "positive"
+    RELAXING = "relaxing"
+    ROMANTIC = "romantic"
+    SAD = "sad"
+    SEXY = "sexy"
+    UPLIFTING = "uplifting"
+    COOL = "cool"
+    DEEP = "deep"
+    EPIC = "epic"
+    FUN = "fun"
+    FUNNY = "funny"
+    GROOVY = "groovy"
+    HEAVY = "heavy"
+    INSPIRING = "inspiring"
+    LOVE = "love"
+    MOTIVATIONAL = "motivational"
+    PARTY = "party"
+    POWERFUL = "powerful"
+    SOFT = "soft"
+    UPBEAT = "upbeat"
 
 
-class IndexArgs(tap.TypedArgs):
-    root: Path = tap.arg(positional=True, metavar="ROOT", help="Library root directory")
-    rescan: bool = tap.arg(help="Re-index tracks already present in the DB")
-    quiet: bool = tap.arg(help="Hide the progress bar (shown by default)")
-    db: Path | None = tap.arg(
-        type=Path, help="Index DB path (default: .sp-index/index.db, relative to the working directory)"
-    )
-
-    def run(self) -> None:
-        index_cmd.IndexArgs.run(root=Path(self.root).expanduser(), db=self.db, rescan=self.rescan, quiet=self.quiet)
-
-
-class PlayArgs(tap.TypedArgs):
-    query: str = tap.arg(positional=True, metavar="QUERY", help="Mood, genre, instrument, or other music query")
-    n: int | None = tap.arg("-n", default=None, help="Number of tracks (default: all indexed)")
-    out: str | None = tap.arg("-o", default=None, help="Output m3u8 path, or '-' for stdout")
-    llm: bool = tap.arg(
-        help="Generate query variants, then decompose each into musical axes with an LLM before embedding"
-    )
-    context: str | None = tap.arg(
-        default=None, help="Additional context for LLM query adaptation (used with --llm)"
-    )
-    seed_track: str | None = tap.arg(
-        default=None, metavar="PATH", help="Use a track's vector as the query instead of text"
-    )
-    alpha: float = tap.arg(
-        default=playlist_cmd.PLAY_DEFAULT_ALPHA,
-        help="Peak-window weight for --seed-track ranking (0 = mean only, 1 = peak only); ignored for text queries",
-    )
-    min_score: float = tap.arg(
-        default=0.9,
-        help="Upper-cluster fit cutoff in [0, 1): every recognized query axis must clear it "
-        "(default 0.9; 0.5 is neutral)",
-    )
-    dry: bool = tap.arg(help="Print the result without writing a playlist")
-    db: Path | None = tap.arg(
-        type=Path, help="Index DB path (default: .sp-index/index.db, relative to the working directory)"
-    )
-
-    def run(self) -> None:
-        playlist_cmd.PlayArgs.run(
-            query=self.query,
-            db=self.db,
-            n=self.n,
-            out=self.out,
-            llm=self.llm,
-            context=self.context,
-            seed_track=self.seed_track,
-            alpha=self.alpha,
-            min_score=self.min_score,
-            dry=self.dry,
-        )
+MOOD_DISPLAY: dict[Mood, str] = {
+    Mood.CALM: "#8db9d8",
+    Mood.RELAXING: "#8db9d8",
+    Mood.MEDITATIVE: "#8db9d8",
+    Mood.SOFT: "#8db9d8",
+    Mood.DREAMY: "#8db9d8",
+    Mood.DEEP: "#7893ab",
+    Mood.EMOTIONAL: "#7893ab",
+    Mood.MELANCHOLIC: "#7893ab",
+    Mood.SAD: "#7893ab",
+    Mood.DARK: "#7893ab",
+    Mood.HAPPY: "#d8c26a",
+    Mood.POSITIVE: "#d8c26a",
+    Mood.HOPEFUL: "#d8c26a",
+    Mood.FUN: "#d8c26a",
+    Mood.FUNNY: "#d8c26a",
+    Mood.COOL: "#d8c26a",
+    Mood.INSPIRING: "#d8c26a",
+    Mood.UPLIFTING: "#d8c26a",
+    Mood.MOTIVATIONAL: "#d8c26a",
+    Mood.ENERGETIC: "#d99a6c",
+    Mood.UPBEAT: "#d99a6c",
+    Mood.GROOVY: "#d99a6c",
+    Mood.PARTY: "#d99a6c",
+    Mood.POWERFUL: "#cf8585",
+    Mood.HEAVY: "#cf8585",
+    Mood.EPIC: "#cf8585",
+    Mood.ROMANTIC: "#d6a0c2",
+    Mood.SEXY: "#d6a0c2",
+    Mood.LOVE: "#d6a0c2",
+}
+PICKER_STYLE = questionary.Style(
+    [
+        ("question", "bold"),
+        ("pointer", "fg:ansicyan bold"),
+        ("highlighted", "fg:ansicyan bold"),
+        ("selected", "fg:ansigreen"),
+        ("instruction", "fg:ansibrightblack italic"),
+    ]
+)
 
 
-class DescribeArgs(tap.TypedArgs):
-    path: str = tap.arg(
-        positional=True, metavar="PATH", help="Track path (absolute, cwd-relative, or indexed rel path)"
-    )
-    n: int = tap.arg("-n", default=describe_cmd.DEFAULT_TOP_N, help="Prompts per axis to show (default: 3)")
-    db: Path | None = tap.arg(
-        type=Path, help="Index DB path (default: .sp-index/index.db, relative to the working directory)"
-    )
-
-    def run(self) -> None:
-        describe_cmd.DescribeArgs.run(path=self.path, db=self.db, n=self.n)
+class CreateArgs(tap.TypedArgs):
+    moods: list[Mood] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
+    count: int = tap.arg("-n", default=30, help="Playlist size (default: 30)")
+    output: str | None = tap.arg("-o", default=None, help="Playlist destination (.m3u8)")
+    dry_run: bool = tap.arg(default=False, help="Preview request without generating a playlist")
 
 
-class StatusArgs(tap.TypedArgs):
-    db: Path | None = tap.arg(
-        type=Path, help="Index DB path (default: .sp-index/index.db, relative to the working directory)"
-    )
+def moods_list_cmd(_: tap.TypedArgs) -> None:
+    for label in MOOD_DISPLAY:
+        print(f"  {label}")
 
-    def run(self) -> None:
-        status_cmd.StatusArgs.run(db=self.db)
+
+def run_mood_picker() -> list[Mood] | None:
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        print("sp create: pass mood labels when running non-interactively", file=sys.stderr)
+        raise SystemExit(2)
+
+    choices = [
+        questionary.Choice(title=[(f"fg:{color}", label.value)], value=label.value)
+        for label, color in MOOD_DISPLAY.items()
+    ]
+    try:
+        selected = questionary.checkbox(
+            "Choose moods to blend",
+            choices=choices,
+            instruction="(Use arrows/jk to move, Space to toggle, Enter to confirm)",
+            style=PICKER_STYLE,
+        ).ask()
+
+    except KeyboardInterrupt:
+        return None
+
+    if selected is None:
+        return None
+
+    return [Mood(label) for label in selected]
+
+
+def create_cmd(args: CreateArgs) -> None:
+    if not args.dry_run:
+        print("sp create: playlist generation is not wired yet; use --dry-run to preview", file=sys.stderr)
+        raise SystemExit(2)
+    if args.count < 1:
+        print("sp create: --count must be at least 1", file=sys.stderr)
+        raise SystemExit(2)
+
+    moods = args.moods
+    if len(moods) == 0:
+        moods = run_mood_picker()
+        if moods is None or len(moods) == 0:
+            print("No moods selected; cancelled.")
+            return
+    if len(set(moods)) != len(moods):
+        print("sp create: each mood label can be selected only once", file=sys.stderr)
+        raise SystemExit(2)
+
+    print("Playlist request (preview only; tag-prediction backend not connected)")
+    print(f"  Moods: {', '.join(mood.value for mood in moods)}")
+    print("  Matching: blend selected labels")
+    print(f"  Tracks: {args.count}")
+    if args.output is not None:
+        print(f"  Output: {args.output}")
 
 
 def main() -> None:
-    level = os.environ.get("SP_LOG_LEVEL", "INFO").upper()
-    logging.basicConfig(level=level, format="%(levelname)s %(name)s: %(message)s")
-    logging.getLogger("httpx").setLevel(logging.DEBUG if level == "DEBUG" else logging.WARNING)
-    parser = tap.Parser(
+    tap.Parser(
         tap.SubParserGroup(
-            tap.SubParser("index", IndexArgs, help="Index a music library"),
-            tap.SubParser("play", PlayArgs, help="Build a mood playlist"),
-            tap.SubParser("describe", DescribeArgs, help="Show top prompt matches for each track attribute axis"),
-            tap.SubParser("status", StatusArgs, help="Show index coverage"),
-            description="Mood-based smart playlists over a local music library.",
+            tap.SubParser("moods", tap.TypedArgs, help="List selectable mood labels"),
+            tap.SubParser("create", CreateArgs, help="Create a playlist from selected mood tags"),
+            description="Create local playlists from a fixed set of mood tags.",
         ),
         prog="sp",
-    )
-    args = parser.parse_args()
-    if isinstance(args, IndexArgs | PlayArgs | DescribeArgs | StatusArgs):
-        args.run()
+    ).bind(moods_list_cmd, create_cmd).run()
 
 
 if __name__ == "__main__":

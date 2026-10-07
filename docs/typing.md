@@ -1,5 +1,7 @@
 # Python typing guide
 
+(can be obsolete in terms of example in repo, since we changing it right now)
+
 Project-specific typing patterns for Python 3.13 and Pyrefly. Keep function
 and method signatures precise; keep implementation code straightforward.
 
@@ -19,8 +21,7 @@ and method signatures precise; keep implementation code straightforward.
 - Represent absence explicitly with `T | None`; narrow before using the value.
 - Validate or narrow dynamic data once at its boundary. Prefer `object` when
   accepting an unknown value; use `Any` only where an external or reflective
-  API is inherently dynamic. Existing `verify_type` / `verify_not_none`
-  helpers provide runtime-checked narrowing when appropriate.
+  API is inherently dynamic.
 - Avoid `typing.cast`: it returns the value unchanged and performs no runtime
   check. First try `isinstance`, an assertion for a verified invariant, or a
   small typed adapter. A localized cast is acceptable only when a third-party
@@ -65,8 +66,8 @@ and method signatures precise; keep implementation code straightforward.
   `S[V * D]`. For `np.concatenate` / `np.frombuffer`, one assertion at the
   boundary should be enough. Do not add wrapper functions solely to placate
   inference.
-- For reshape with a desired output shape, use
-  `numpy_helpers.reshape(arr, (n, dim))`; it preserves the supplied shape type.
+- For reshape with a desired output shape, use `arr.reshape((n, dim))` and
+  preserve a useful shape contract at the function boundary.
 - For shaped `np.empty`, a literal zero dimension may remain `Literal[0]` and
   fail to unify. If zero comes from an array length, use `len(array)`; otherwise
   bind it to a typed `int` first.
@@ -104,9 +105,7 @@ Known gaps in current stubs:
 - Prefer `np.greater`, `np.greater_equal`, and `np.equal` over shaped-array
   comparison dunders rather than suppressing loss of shape information.
 
-## Useful examples in this repository
+## Repository examples
 
-- Runtime-checked boundary helpers: `src/local_smart_playlist/type_utils.py`
-- Generic shape-preserving Torch-to-NumPy adapter: `src/local_smart_playlist/embed/model.py`
-- Shaped records and database boundary validation:
-  `src/local_smart_playlist/index/store.py`
+The former audio, embedding, and database modules were removed during the CLI
+rewrite. Keep examples here aligned with modules that exist in the repository.
