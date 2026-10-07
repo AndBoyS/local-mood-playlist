@@ -22,7 +22,7 @@ AXIS_TO_PROMPTS: dict[QueryAxis, NonEmptyTuple[str]] = {
     QueryAxis.MOOD: NonEmptyTuple(
         (
             "cheerful mood.",
-            "joyful mood.",
+            "ethereal mood.",
             "happy mood.",
             "upbeat mood.",
             "playful mood.",

@@ -42,6 +42,8 @@ def test_reference_prompts_are_balanced_and_ranges_match() -> None:
     assert all(len(prompts) == 32 for prompts in AXIS_TO_PROMPTS.values())
     assert all("," not in prompt for prompts in AXIS_TO_PROMPTS.values() for prompt in prompts)
     assert all(prompt.endswith(" mood.") for prompt in AXIS_TO_PROMPTS[QueryAxis.MOOD])
+    assert "ethereal mood." in AXIS_TO_PROMPTS[QueryAxis.MOOD]
+    assert "joyful mood." not in AXIS_TO_PROMPTS[QueryAxis.MOOD]
 
     ranges = calibration_axis_ranges()
     ordered = list(ranges.values())

@@ -31,11 +31,14 @@ AIMP). Use `-o` for a custom destination, `-o -` to print the m3u8 to stdout.
 Text queries rank by adaptive upper-cluster fit against axis reference prompts.
 For each track, query and anchor similarities are averaged across stored windows;
 the scorer separates the top anchor cluster from lower anchors and maps relative
-fit to [0, 1]. A score above 0.5 favors the upper cluster. Without `--llm`,
+fit to [0, 1]. A score above 0.5 favors the upper cluster. Comma-separated
+attributes are embedded and scored separately; mood terms use caption phrasing
+(e.g. `dreamy` becomes `dreamy mood.`). Final fit is minimum component score,
+so every listed attribute must clear `--min-score`. Without `--llm`,
 the query uses mood anchors, matching the evaluated production recipe. With
 `--llm`, each adapted query is decomposed into axis-labelled components and
-scored against that axis's 32 prompts; every component must clear
-`--min-score`, and weakest-axis fit determines rank. Axes cover mood,
+scored against that axis's 32 prompts; comma-separated terms within an axis are
+also scored independently, and weakest-component fit determines rank. Axes cover mood,
 genre/style, instruments/sources, vocals, tempo/rhythm, arrangement/dynamics,
 timbre/production, and recording/context. Full-library scan uses stored
 windows; tracks without them must be re-indexed.
