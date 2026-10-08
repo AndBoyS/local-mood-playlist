@@ -13,8 +13,8 @@ The large binary checkpoints (`saved_models/J_all.ckpt`,
 `inference/data/btc_model_large_voca.pt`) are not stored in git. They are
 downloaded on first use from the pinned Hugging Face revision
 `amaai-lab/music2emo@b036e59471583c3d5b30c69e63e8c7323cc36c4a` and cached under
-the user cache directory; see `src/local_smart_playlist/assets.py` for the
-pinned SHA-256 digests.
+the project `.cache` directory; see `src/local_smart_playlist/assets.py` for
+the pinned SHA-256 digests.
 
 Local patch in `music2emo.py`:
 

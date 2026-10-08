@@ -11,3 +11,4 @@ __pycache__/
 .vscode/launch.json
 :memory:.ses
 temp/
+.cache/

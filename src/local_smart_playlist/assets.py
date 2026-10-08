@@ -1,14 +1,13 @@
 """Download and verify vendored Music2Emotion binary assets on first use.
 
 The large model checkpoints are not stored in git. They are fetched from the
-pinned upstream Hugging Face repository revision and cached under the user
-cache directory, keyed by revision.
+pinned upstream Hugging Face repository revision and cached under the project
+`.cache` directory, keyed by revision.
 """
 
 from __future__ import annotations
 
 import hashlib
-import os
 import tempfile
 import urllib.request
 from dataclasses import dataclass
@@ -39,10 +38,9 @@ MUSIC2EMO_ASSETS: dict[str, RemoteAsset] = {
 
 
 def music2emo_asset_cache_root() -> Path:
-    """Cache directory for pinned Music2Emotion assets, keyed by revision."""
-    cache_home = os.environ.get("XDG_CACHE_HOME")
-    root = Path(cache_home).expanduser() if cache_home is not None else Path.home() / ".cache"
-    return root / "local-smart-playlist" / "music2emo" / MUSIC2EMO_HF_REVISION
+    """Project-local cache directory for pinned assets, keyed by revision."""
+    project_root = Path(__file__).resolve().parents[2]
+    return project_root / ".cache" / "music2emo" / MUSIC2EMO_HF_REVISION
 
 
 def _sha256(path: Path) -> str:
