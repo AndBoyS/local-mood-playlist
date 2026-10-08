@@ -7,6 +7,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from local_smart_playlist.assets import ensure_music2emo_assets
 from local_smart_playlist.predictions import TrackPrediction
 
 MODEL_VERSION = "m2e-c5f7984-j95926289-btc11c6ed-tags-c53cee67-mert12af15fe-patch2"
@@ -17,7 +18,9 @@ class _Music2EmotionRuntime(Protocol):
     def predict(self, audio: str | Path, threshold: float = 0.5) -> dict[str, object]: ...
 
 
-def _load_model() -> _Music2EmotionRuntime:
+def _load_model(
+    *, model_weights: Path, chord_model_weights: Path
+) -> _Music2EmotionRuntime:
     repository_root = Path(__file__).resolve().parents[2]
     vendor_path = repository_root / "vendor" / "music2emotion"
     vendor_directory = str(vendor_path)
@@ -28,7 +31,9 @@ def _load_model() -> _Music2EmotionRuntime:
     model_factory: object = getattr(module, "Music2emo", None)
     if not callable(model_factory):
         raise TypeError("vendored module has no Music2emo model factory")
-    model: object = model_factory()
+    model: object = model_factory(
+        model_weights=model_weights, chord_model_weights=chord_model_weights
+    )
     if not isinstance(model, _Music2EmotionRuntime):
         raise TypeError("vendored Music2emo model does not implement predict()")
     return model
@@ -38,7 +43,11 @@ class Music2Emotion:
     """Load one MERT/Music2Emotion model in current Python process."""
 
     def __init__(self) -> None:
-        self._model = _load_model()
+        assets = ensure_music2emo_assets()
+        self._model = _load_model(
+            model_weights=assets["saved_models/J_all.ckpt"],
+            chord_model_weights=assets["inference/data/btc_model_large_voca.pt"],
+        )
 
     def predict(self, audio_path: Path) -> TrackPrediction:
         result = self._model.predict(audio_path.expanduser().resolve(strict=True), threshold=0.5)

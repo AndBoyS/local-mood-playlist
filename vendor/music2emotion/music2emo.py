@@ -190,6 +190,7 @@ class Music2emo:
         self,
         model_weights: str | Path | None = None,
         work_dir: str | Path | None = None,
+        chord_model_weights: str | Path | None = None,
     ) -> None:
         self.root = Path(__file__).resolve().parent
         self.model_weights = Path(model_weights) if model_weights is not None else self.root / "saved_models" / "J_all.ckpt"
@@ -248,7 +249,7 @@ class Music2emo:
         self.chord_config = HParams.load(self.root / "inference/data/run_config.yaml")
         self.chord_config.feature['large_voca'] = True
         self.chord_config.model['num_chords'] = 170
-        chord_model_path = self.root / "inference/data/btc_model_large_voca.pt"
+        chord_model_path = Path(chord_model_weights) if chord_model_weights is not None else self.root / "inference/data/btc_model_large_voca.pt"
         if not chord_model_path.is_file():
             raise FileNotFoundError(f"Music2Emotion chord checkpoint missing: {chord_model_path}")
         # Trusted vendored checkpoint includes NumPy scalars; PyTorch 2.6+ defaults to weights_only=True.
