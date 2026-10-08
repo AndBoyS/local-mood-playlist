@@ -26,7 +26,7 @@ The Music2Emotion code is MIT-licensed, but the MERT checkpoint downloaded from
 Hugging Face is licensed CC BY-NC 4.0. This dependency restricts use to
 non-commercial settings unless separate permission is obtained.
 
-Dependency subset lives in [`../../inference/requirements.txt`](../../inference/requirements.txt).
-It targets Python 3.10 because upstream pins PyTorch 2.3.1. Keep this runtime
-separate from app's Python 3.13 environment. MERT weights download from Hugging
-Face on first initialization.
+Runtime dependencies are managed by the main project environment in
+`pyproject.toml`/`uv.lock`. This project uses Python 3.13-compatible PyTorch
+and Transformers versions; MERT weights download from Hugging Face on first
+initialization.

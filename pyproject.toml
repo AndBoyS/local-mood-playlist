@@ -5,7 +5,18 @@ description = "CLI for fixed-vocabulary mood playlists from a local music librar
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "audioread>=3.0.1",
+    "librosa>=1.0.0",
+    "mir_eval @ git+https://github.com/mir-evaluation/mir_eval.git@1fed5327e2a65c3294579beafa03a6498b4da3d0",
+    "music21==9.3.0",
+    "numpy>=2.5.3",
+    "pretty_midi==0.2.10",
+    "PyYAML>=6.0.3",
     "questionary>=2.1.1",
+    "setuptools<81",
+    "torch>=2.14",
+    "torchaudio>=2.11",
+    "transformers>=4.57.6,<5",
     "typed-argparse>=0.3.1",
 ]
 

@@ -13,7 +13,7 @@ class FeatureExtractorMERT:
             device = torch.device("cuda" if use_cuda else "cpu")
         else:
             self.device = device
-                
+
         self.model = AutoModel.from_pretrained(
             self.model_name,
             revision=MERT_REVISION,

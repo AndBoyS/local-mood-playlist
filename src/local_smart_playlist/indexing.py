@@ -3,14 +3,23 @@
 import hashlib
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from local_smart_playlist.music2emotion import MODEL_VERSION, Music2EmotionWorker
+from local_smart_playlist.music2emotion import MODEL_VERSION, Music2Emotion
 from local_smart_playlist.predictions import PredictionCache
 
 _AUDIO_SUFFIXES = frozenset({".flac", ".m4a", ".mp3", ".wav"})
 _SAVE_EVERY = 25
+ProgressUpdate = tuple[int, int, Path | None]
+ProgressCallback = Callable[[ProgressUpdate], None]
+
+
+@dataclass(frozen=True)
+class IndexFailure:
+    audio_path: Path
+    error: str
 
 
 @dataclass(frozen=True)
@@ -18,7 +27,12 @@ class IndexSummary:
     tracks_found: int
     predictions_reused: int
     predictions_computed: int
+    failures: tuple[IndexFailure, ...]
     cache_path: Path
+
+    @property
+    def predictions_failed(self) -> int:
+        return len(self.failures)
 
 
 def default_cache_path(library_path: Path) -> Path:
@@ -39,6 +53,7 @@ def index_library(
     *,
     cache_path: Path | None = None,
     force: bool = False,
+    on_progress: ProgressCallback | None = None,
 ) -> IndexSummary:
     """Predict uncached or changed audio files; store raw scores for later ranking."""
     root = library_path.expanduser().resolve(strict=True)
@@ -60,15 +75,25 @@ def index_library(
         else:
             pending.append(audio_file)
 
+    computed = 0
+    failures: list[IndexFailure] = []
     if len(pending) > 0:
-        computed = 0
+        if on_progress is not None:
+            on_progress((0, len(pending), None))
         try:
-            with Music2EmotionWorker() as worker:
-                for index, audio_file in enumerate(pending, start=1):
-                    cache.put(audio_file, worker.predict(audio_file))
+            model = Music2Emotion()
+            for index, audio_file in enumerate(pending, start=1):
+                try:
+                    prediction = model.predict(audio_file)
+                except Exception as error:
+                    failures.append(IndexFailure(audio_file, str(error)))
+                else:
+                    cache.put(audio_file, prediction)
                     computed += 1
-                    if index % _SAVE_EVERY == 0:
-                        cache.save()
+                if on_progress is not None:
+                    on_progress((index, len(pending), audio_file))
+                if index % _SAVE_EVERY == 0:
+                    cache.save()
         except Exception:
             if computed > 0:
                 cache.save()
@@ -78,6 +103,7 @@ def index_library(
     return IndexSummary(
         tracks_found=len(audio_files),
         predictions_reused=reused,
-        predictions_computed=len(pending),
+        predictions_computed=computed,
+        failures=tuple(failures),
         cache_path=actual_cache_path,
     )

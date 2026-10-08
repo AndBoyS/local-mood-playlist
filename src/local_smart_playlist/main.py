@@ -3,11 +3,12 @@
 import sys
 from enum import StrEnum
 from pathlib import Path
+from time import monotonic
 
 import questionary
 import typed_argparse as tap
 
-from local_smart_playlist.indexing import index_library
+from local_smart_playlist.indexing import ProgressUpdate, index_library
 
 
 class Mood(StrEnum):
@@ -73,6 +74,8 @@ MOOD_DISPLAY: dict[Mood, str] = {
     Mood.SEXY: "#d6a0c2",
     Mood.LOVE: "#d6a0c2",
 }
+_MAX_FAILURES_TO_PRINT = 20
+
 PICKER_STYLE = questionary.Style(
     [
         ("question", "bold"),
@@ -103,19 +106,54 @@ def moods_list_cmd(_: tap.TypedArgs) -> None:
 
 
 def index_cmd(args: IndexArgs) -> None:
+    progress_started = monotonic()
+    progress_active = False
+
+    def report_progress(update: ProgressUpdate) -> None:
+        nonlocal progress_active
+        completed, total, audio_path = update
+        if total == 0:
+            return
+        width = 30
+        filled = width * completed // total
+        bar = "#" * filled + "-" * (width - filled)
+        percent = completed * 100 // total
+        if completed == 0:
+            eta = "ETA calculating"
+        else:
+            remaining = int((monotonic() - progress_started) / completed * (total - completed))
+            eta = f"ETA {remaining // 60:02d}m{remaining % 60:02d}s"
+        track_name = "starting" if audio_path is None else audio_path.name[:48]
+        progress_line = f"Indexing [{bar}] {percent:3d}% {completed}/{total} {eta} {track_name}"
+        if sys.stderr.isatty():
+            print(f"\r{progress_line}", end="", file=sys.stderr, flush=True)
+            progress_active = True
+        else:
+            print(progress_line, file=sys.stderr, flush=True)
+
     try:
         summary = index_library(
             Path(args.library),
             cache_path=Path(args.cache) if args.cache is not None else None,
             force=args.force,
+            on_progress=report_progress,
         )
     except (OSError, TypeError, ValueError, RuntimeError) as error:
         print(f"sp index: {error}", file=sys.stderr)
         raise SystemExit(2) from error
+    finally:
+        if progress_active:
+            print(file=sys.stderr, flush=True)
 
     print(f"Indexed {summary.tracks_found} audio files")
     print(f"  Reused: {summary.predictions_reused}")
     print(f"  Predicted: {summary.predictions_computed}")
+    print(f"  Failed: {summary.predictions_failed}")
+    for failure in summary.failures[:_MAX_FAILURES_TO_PRINT]:
+        print(f"  {failure.audio_path}: {failure.error}", file=sys.stderr)
+    if summary.predictions_failed > _MAX_FAILURES_TO_PRINT:
+        remaining_failures = summary.predictions_failed - _MAX_FAILURES_TO_PRINT
+        print(f"  ... and {remaining_failures} more failures", file=sys.stderr)
     print(f"  Cache: {summary.cache_path}")
 
 

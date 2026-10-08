@@ -14,12 +14,11 @@ Guidelines for coding agents working in this repo.
 - CLI exposes a fixed mood vocabulary through `sp moods` and
   `sp create MOOD [MOOD ...]`; `sp create --dry-run` with no labels opens a
   flat Questionary multi-select picker in a terminal.
-- `sp index DIRECTORY` runs vendored Music2Emotion in separate Python 3.10
-  environment and caches canonical tag scores. Playlist ranking and writing
-  are not implemented; `sp create --dry-run` previews only.
+- `sp index DIRECTORY` runs vendored Music2Emotion in-process in the main
+  Python 3.13 environment and caches canonical tag scores. Playlist ranking
+  and writing are not implemented; `sp create --dry-run` previews only.
 - Keep mood labels mapped to the model's canonical tag names. User-facing
   aliases belong at the CLI boundary.
-- Keep CLI parsing and validation independent from future model dependencies.
 
 ## Conventions
 

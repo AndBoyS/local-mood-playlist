@@ -6,11 +6,11 @@ import tempfile
 import warnings
 from pathlib import Path
 
+import audioread
 import librosa
 import mir_eval
 import numpy as np
 import torch
-import torchaudio
 import torchaudio.transforms as T
 from music21 import note, stream
 
@@ -62,6 +62,7 @@ resample_rate = 24000
 is_split = True
 _MERT_BATCH_SIZE = 4
 _BTC_BATCH_SIZE = 8
+_MIN_MERT_TAIL_SECONDS = 0.1
 
 def normalize_chord(file_path, key, key_type='major'):
     with open(file_path, 'r') as f:
@@ -121,6 +122,23 @@ def normalize_chord(file_path, key, key_type='major'):
 
 def sanitize_key_signature(key):
     return key.replace('-', 'b')
+
+def _load_audio(audio_path):
+    if Path(audio_path).suffix.lower() != ".m4a":
+        return librosa.load(audio_path, sr=None, mono=False)
+
+    chunks = []
+    with audioread.audio_open(str(audio_path)) as audio_file:
+        sample_rate = audio_file.samplerate
+        channel_count = audio_file.channels
+        for frame in audio_file:
+            chunks.append(np.frombuffer(frame, dtype="<i2").astype(np.float32) / 32768.0)
+
+    waveform = np.concatenate(chunks) if chunks else np.empty(0, dtype=np.float32)
+    if channel_count > 1:
+        waveform = waveform.reshape((-1, channel_count)).T
+    return waveform, sample_rate
+
 
 def resample_waveform(waveform, original_sample_rate, target_sample_rate):
     if original_sample_rate != target_sample_rate:
@@ -233,7 +251,8 @@ class Music2emo:
         chord_model_path = self.root / "inference/data/btc_model_large_voca.pt"
         if not chord_model_path.is_file():
             raise FileNotFoundError(f"Music2Emotion chord checkpoint missing: {chord_model_path}")
-        chord_checkpoint = torch.load(chord_model_path, map_location="cpu")
+        # Trusted vendored checkpoint includes NumPy scalars; PyTorch 2.6+ defaults to weights_only=True.
+        chord_checkpoint = torch.load(chord_model_path, map_location="cpu", weights_only=False)
         self.chord_mean = chord_checkpoint['mean']
         self.chord_std = chord_checkpoint['std']
         self.chord_model = BTC_model(config=self.chord_config.model).to(self.device)
@@ -260,12 +279,8 @@ class Music2emo:
         # use_cuda = torch.cuda.is_available()
         # device = torch.device("cuda" if use_cuda else "cpu")
 
-        if Path(audio).suffix.lower() == ".m4a":
-            original_waveform, sample_rate = librosa.load(audio, sr=None, mono=False)
-            waveform = torch.from_numpy(original_waveform)
-        else:
-            waveform, sample_rate = torchaudio.load(audio)
-            original_waveform = waveform.numpy()
+        original_waveform, sample_rate = _load_audio(audio)
+        waveform = torch.from_numpy(original_waveform)
         original_sample_rate = sample_rate
         audio_waveform_for_cqt = (
             librosa.to_mono(original_waveform)
@@ -290,10 +305,17 @@ class Music2emo:
             )
             for start in range(0, len(full_segments), _MERT_BATCH_SIZE)
         ]
-        batched_embeddings.extend(
-            self.feature_extractor.extract_features_from_segment(segment, sample_rate)
-            for segment in partial_segments
-        )
+        for segment in partial_segments:
+            try:
+                embedding = self.feature_extractor.extract_features_from_segment(segment, sample_rate)
+            except RuntimeError as error:
+                is_tiny_tail = segment.size(0) < _MIN_MERT_TAIL_SECONDS * sample_rate
+                is_convolution_length_error = "Kernel size: (3)" in str(error)
+                if not (batched_embeddings and is_tiny_tail and is_convolution_length_error):
+                    raise
+                # Keep full-track CQT/chord features; omit only unembedable MERT tail.
+            else:
+                batched_embeddings.append(embedding)
         final_embedding_mert = torch.cat(batched_embeddings, dim=0).mean(dim=0)
 
         # --- Chord feature extract ---
@@ -315,7 +337,6 @@ class Music2emo:
             logger.info("audio file failed to load : %s" % audio_path)
             assert(False)
             
-        logger.info("audio file loaded and feature computation success : %s" % audio_path)
         
         feature = feature.T
         feature = (feature - mean) / std
