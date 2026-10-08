@@ -29,8 +29,25 @@ def idx2voca_chord():
 
 
 
-def audio_file_to_features(audio_file, config):
-    original_wav, sr = librosa.load(audio_file, sr=config.mp3['song_hz'], mono=True)
+def audio_file_to_features(
+    audio_file,
+    config,
+    audio_waveform: np.ndarray | None = None,
+    sample_rate: int | None = None,
+):
+    if audio_waveform is None:
+        original_wav, sr = librosa.load(audio_file, sr=config.mp3['song_hz'], mono=True)
+    else:
+        if sample_rate is None:
+            raise ValueError("sample_rate is required when reusing decoded audio")
+        original_wav = np.asarray(audio_waveform)
+        if original_wav.ndim == 2:
+            original_wav = librosa.to_mono(original_wav)
+        elif original_wav.ndim != 1:
+            raise ValueError("audio_waveform must have shape (samples,) or (channels, samples)")
+        sr = config.mp3['song_hz']
+        if sample_rate != sr:
+            original_wav = librosa.resample(original_wav, orig_sr=sample_rate, target_sr=sr)
     song_length_second = len(original_wav) / sr
     inst_samples = int(sr * config.mp3['inst_len'])
     currunt_sec_hz = 0

@@ -1,4 +1,5 @@
 .venv/
+.venv-m2e/
 dist/
 .sp-index/
 .pytest_cache/

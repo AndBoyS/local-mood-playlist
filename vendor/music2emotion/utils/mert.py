@@ -28,8 +28,8 @@ class FeatureExtractorMERT:
             trust_remote_code=True,
         )
 
-    def extract_features_from_segment(self, segment, sample_rate):
-        input_audio = segment.float()
+    def extract_features_from_segments(self, segments, sample_rate):
+        input_audio = [segment.float().detach().cpu().numpy() for segment in segments]
         model_inputs = self.processor(input_audio, sampling_rate=sample_rate, return_tensors="pt")
         model_inputs = model_inputs.to(self.device)
 
@@ -41,3 +41,6 @@ class FeatureExtractorMERT:
         )
         all_layer_hidden_states = selected_hidden_states.mean(dim=2).permute(1, 0, 2)
         return all_layer_hidden_states.reshape(all_layer_hidden_states.shape[0], -1)
+
+    def extract_features_from_segment(self, segment, sample_rate):
+        return self.extract_features_from_segments([segment], sample_rate)

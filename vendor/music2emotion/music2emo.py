@@ -9,11 +9,10 @@ from pathlib import Path
 import librosa
 import mir_eval
 import numpy as np
-import pretty_midi as pm
 import torch
 import torchaudio
 import torchaudio.transforms as T
-from music21 import converter
+from music21 import note, stream
 
 from model.linear_mt_attn_ck import FeedforwardModelMTAttnCK
 from utils import logger
@@ -61,6 +60,8 @@ flat_to_sharp_mapping = {
 segment_duration = 30
 resample_rate = 24000
 is_split = True
+_MERT_BATCH_SIZE = 4
+_BTC_BATCH_SIZE = 8
 
 def normalize_chord(file_path, key, key_type='major'):
     with open(file_path, 'r') as f:
@@ -259,41 +260,41 @@ class Music2emo:
         # use_cuda = torch.cuda.is_available()
         # device = torch.device("cuda" if use_cuda else "cpu")
 
-        mert_dir = feature_dir / "mert"
-        mert_dir.mkdir(parents=True)
-
         if Path(audio).suffix.lower() == ".m4a":
-            waveform_array, sample_rate = librosa.load(audio, sr=None, mono=False)
-            waveform = torch.from_numpy(waveform_array)
-            if waveform.ndim == 1:
-                waveform = waveform.unsqueeze(0)
+            original_waveform, sample_rate = librosa.load(audio, sr=None, mono=False)
+            waveform = torch.from_numpy(original_waveform)
         else:
             waveform, sample_rate = torchaudio.load(audio)
+            original_waveform = waveform.numpy()
+        original_sample_rate = sample_rate
+        audio_waveform_for_cqt = (
+            librosa.to_mono(original_waveform)
+            if original_waveform.ndim == 2
+            else original_waveform
+        )
+        del original_waveform
+        if waveform.ndim == 1:
+            waveform = waveform.unsqueeze(0)
         if waveform.shape[0] > 1:
             waveform = waveform.mean(dim=0).unsqueeze(0)
         waveform = waveform.squeeze()
         waveform, sample_rate = resample_waveform(waveform, sample_rate, resample_rate)
 
         segments = split_audio(waveform, sample_rate) if is_split else [waveform]
-        for i, segment in enumerate(segments):
-            segment_save_path = os.path.join(mert_dir, f"segment_{i}.npy")
-            self.feature_extractor.extract_features_from_segment(segment, sample_rate, segment_save_path)
-
-        segment_embeddings = []
-        for filename in sorted(os.listdir(mert_dir)):
-            file_path = os.path.join(mert_dir, filename)
-            if os.path.isfile(file_path) and filename.endswith('.npy'):
-                segment = np.load(file_path)
-                concatenated_features = np.concatenate(
-                    [segment[:, layer_idx, :] for layer_idx in [0, 1]], axis=1
-                )
-                segment_embeddings.append(np.squeeze(concatenated_features))
-
-        if len(segment_embeddings) > 0:
-            final_embedding_mert = np.mean(np.array(segment_embeddings), axis=0)
-        else:
-            final_embedding_mert = np.zeros((1536,))
-        final_embedding_mert = torch.from_numpy(final_embedding_mert)
+        segment_length = segment_duration * sample_rate
+        full_segments = [segment for segment in segments if segment.size(0) == segment_length]
+        partial_segments = [segment for segment in segments if segment.size(0) != segment_length]
+        batched_embeddings = [
+            self.feature_extractor.extract_features_from_segments(
+                full_segments[start : start + _MERT_BATCH_SIZE], sample_rate
+            )
+            for start in range(0, len(full_segments), _MERT_BATCH_SIZE)
+        ]
+        batched_embeddings.extend(
+            self.feature_extractor.extract_features_from_segment(segment, sample_rate)
+            for segment in partial_segments
+        )
+        final_embedding_mert = torch.cat(batched_embeddings, dim=0).mean(dim=0)
 
         # --- Chord feature extract ---
         config = self.chord_config
@@ -304,7 +305,12 @@ class Music2emo:
 
         audio_path = str(Path(audio).expanduser().resolve(strict=True))
         try:
-            feature, feature_per_second, song_length_second = audio_file_to_features(audio_path, config)
+            feature, feature_per_second, song_length_second = audio_file_to_features(
+                audio_path,
+                config,
+                audio_waveform=audio_waveform_for_cqt,
+                sample_rate=original_sample_rate,
+            )
         except:
             logger.info("audio file failed to load : %s" % audio_path)
             assert(False)
@@ -325,19 +331,26 @@ class Music2emo:
         with torch.no_grad():
             model.eval()
             feature = torch.tensor(feature, dtype=torch.float32).unsqueeze(0).to(self.device)
-            for t in range(num_instance):
-                self_attn_output, _ = model.self_attn_layers(feature[:, n_timestep * t:n_timestep * (t + 1), :])
+            feature_chunks = feature.reshape(num_instance, n_timestep, feature.shape[-1])
+            prediction_chunks: list[list[int]] = []
+            for batch_start in range(0, num_instance, _BTC_BATCH_SIZE):
+                feature_batch = feature_chunks[batch_start : batch_start + _BTC_BATCH_SIZE]
+                self_attn_output, _ = model.self_attn_layers(feature_batch)
                 prediction, _ = model.output_layer(self_attn_output)
-                prediction = prediction.squeeze()
+                prediction_chunks.extend(
+                    prediction.cpu().reshape(-1, n_timestep).tolist()
+                )
+
+            for t, prediction_indices in enumerate(prediction_chunks):
                 for i in range(n_timestep):
                     if t == 0 and i == 0:
-                        prev_chord = prediction[i].item()
+                        prev_chord = prediction_indices[i]
                         continue
-                    if prediction[i].item() != prev_chord:
+                    if prediction_indices[i] != prev_chord:
                         lines.append(
                             '%.3f %.3f %s\n' % (start_time, time_unit * (n_timestep * t + i), idx_to_chord[prev_chord]))
                         start_time = time_unit * (n_timestep * t + i)
-                        prev_chord = prediction[i].item()
+                        prev_chord = prediction_indices[i]
                     if t == num_instance - 1 and i + num_pad == n_timestep:
                         if start_time != time_unit * (n_timestep * t + i):
                             lines.append('%.3f %.3f %s\n' % (start_time, time_unit * (n_timestep * t + i), idx_to_chord[prev_chord]))
@@ -350,7 +363,7 @@ class Music2emo:
 
         # logger.info("label file saved : %s" % save_path)
 
-        # lab file to midi file
+        # Build an in-memory score for key analysis (PrettyMIDI's default is 120 BPM).
         starts, ends, pitchs = list(), list(), list()
 
         intervals, chords = mir_eval.io.load_labeled_intervals(save_path)
@@ -371,15 +384,11 @@ class Music2emo:
                     if label == 1.0:
                         starts.append(start_time), ends.append(interval[1]), pitchs.append(p + 48)
 
-        midi = pm.PrettyMIDI()
-        instrument = pm.Instrument(program=0)
-
+        key_score = stream.Stream()
         for start, end, pitch in zip(starts, ends, pitchs):
-            pm_note = pm.Note(velocity=120, pitch=pitch, start=start, end=end)
-            instrument.notes.append(pm_note)
-
-        midi.instruments.append(instrument)
-        midi.write(save_path.replace('.lab', '.midi'))
+            key_note = note.Note(pitch)
+            key_note.quarterLength = (end - start) * 2.0
+            key_score.insert(start * 2.0, key_note)
 
         tonic_signatures = ["A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"]
         mode_signatures = ["major", "minor"]  # Major and minor modes
@@ -389,19 +398,13 @@ class Music2emo:
         idx_to_tonic = {idx: tonic for tonic, idx in tonic_to_idx.items()}
         idx_to_mode = {idx: mode for mode, idx in mode_to_idx.items()}
 
-        with (self.root / 'inference/data/chord.json').open('r') as f:
-            chord_to_idx = json.load(f)
-        with (self.root / 'inference/data/chord_inv.json').open('r') as f:
-            idx_to_chord = json.load(f)
-            idx_to_chord = {int(k): v for k, v in idx_to_chord.items()}  # Ensure keys are ints
         with (self.root / 'inference/data/chord_root.json').open('r') as json_file:
             chordRootDic = json.load(json_file)
         with (self.root / 'inference/data/chord_attr.json').open('r') as json_file:
             chordAttrDic = json.load(json_file)
 
         try:
-            midi_file = converter.parse(save_path.replace('.lab', '.midi'))
-            key_signature = str(midi_file.analyze('key'))
+            key_signature = str(key_score.analyze('key'))
         except Exception as e:
             key_signature = "None"
 
@@ -436,10 +439,8 @@ class Music2emo:
                     start, end, chord = line.strip().split()
                     chords.append((float(start), float(end), chord))
 
-        encoded = []
-        encoded_root= []
-        encoded_attr=[]
-        durations = []
+        encoded_root: list[int] = []
+        encoded_attr: list[int] = []
 
         for start, end, chord in chords:
             chord_arr = chord.split(":")
@@ -457,42 +458,23 @@ class Music2emo:
             encoded_root.append(chordRootID)
             encoded_attr.append(chordAttrID)
 
-            if chord in chord_to_idx:
-                encoded.append(chord_to_idx[chord])
-            else:
-                print(f"Warning: Chord {chord} not found in chord.json. Skipping.")
-            
-            durations.append(end - start)  # Compute duration
-        
-        encoded_chords = np.array(encoded)
         encoded_chords_root = np.array(encoded_root)
         encoded_chords_attr = np.array(encoded_attr)
-        
-        # Maximum sequence length for chords
-        max_sequence_length = 100  # Define this globally or as a parameter
 
-        # Truncate or pad chord sequences
-        if len(encoded_chords) > max_sequence_length:
-            # Truncate to max length
-            encoded_chords = encoded_chords[:max_sequence_length]
+        max_sequence_length = 100
+        if len(encoded_chords_root) > max_sequence_length:
             encoded_chords_root = encoded_chords_root[:max_sequence_length]
             encoded_chords_attr = encoded_chords_attr[:max_sequence_length]
-        
         else:
-            # Pad with zeros (padding value for chords)
-            padding = [0] * (max_sequence_length - len(encoded_chords))
-            encoded_chords = np.concatenate([encoded_chords, padding])
+            padding = [0] * (max_sequence_length - len(encoded_chords_root))
             encoded_chords_root = np.concatenate([encoded_chords_root, padding])
             encoded_chords_attr = np.concatenate([encoded_chords_attr, padding])
-            
-        # Convert to tensor
-        chords_tensor = torch.tensor(encoded_chords, dtype=torch.long).to(self.device)
+
         chords_root_tensor = torch.tensor(encoded_chords_root, dtype=torch.long).to(self.device)
         chords_attr_tensor = torch.tensor(encoded_chords_attr, dtype=torch.long).to(self.device)
 
         model_input_dic = {
             "x_mert": final_embedding_mert.unsqueeze(0),
-            "x_chord": chords_tensor.unsqueeze(0),
             "x_chord_root": chords_root_tensor.unsqueeze(0),
             "x_chord_attr": chords_attr_tensor.unsqueeze(0),
             "x_key": mode_tensor.unsqueeze(0)

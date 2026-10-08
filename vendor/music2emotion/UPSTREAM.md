@@ -14,7 +14,10 @@ Local patch in `music2emo.py`:
 - Decode M4A through librosa/FFmpeg where torchaudio's SoundFile backend cannot.
 - Select Apple MPS between CUDA and CPU; load checkpoints on CPU before moving models.
 - Stop MERT after transformer layer 7; classifier only consumes hidden states 6 and 7.
+- Batch equal-length 30-second MERT segments in groups of four; process shorter tail singly.
 - Keep segment embeddings on the selected device and average before device transfer; avoid per-segment NPY I/O.
+- Transfer BTC chord predictions to CPU once per 10-second window, not once per frame.
+- Drop unused chord class-index tensor; retain model-required chord-root, chord-attribute, and key features.
 - Return raw canonical mood-tag probabilities alongside upstream thresholded tags.
 - Remove unused demo/training imports from inference module.
 - Pin MERT repository revision to `12af15fef9d0ac838c3f475bfbbf26d2060dd4f5`.

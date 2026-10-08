@@ -2,9 +2,12 @@
 
 import sys
 from enum import StrEnum
+from pathlib import Path
 
 import questionary
 import typed_argparse as tap
+
+from local_smart_playlist.indexing import index_library
 
 
 class Mood(StrEnum):
@@ -88,9 +91,32 @@ class CreateArgs(tap.TypedArgs):
     dry_run: bool = tap.arg(default=False, help="Preview request without generating a playlist")
 
 
+class IndexArgs(tap.TypedArgs):
+    library: str = tap.arg(positional=True, help="Music library directory to analyze")
+    cache: str | None = tap.arg(default=None, help="Prediction cache file path")
+    force: bool = tap.arg(default=False, help="Recompute predictions for every supported audio file")
+
+
 def moods_list_cmd(_: tap.TypedArgs) -> None:
     for label in MOOD_DISPLAY:
         print(f"  {label}")
+
+
+def index_cmd(args: IndexArgs) -> None:
+    try:
+        summary = index_library(
+            Path(args.library),
+            cache_path=Path(args.cache) if args.cache is not None else None,
+            force=args.force,
+        )
+    except (OSError, TypeError, ValueError, RuntimeError) as error:
+        print(f"sp index: {error}", file=sys.stderr)
+        raise SystemExit(2) from error
+
+    print(f"Indexed {summary.tracks_found} audio files")
+    print(f"  Reused: {summary.predictions_reused}")
+    print(f"  Predicted: {summary.predictions_computed}")
+    print(f"  Cache: {summary.cache_path}")
 
 
 def run_mood_picker() -> list[Mood] | None:
@@ -137,7 +163,7 @@ def create_cmd(args: CreateArgs) -> None:
         print("sp create: each mood label can be selected only once", file=sys.stderr)
         raise SystemExit(2)
 
-    print("Playlist request (preview only; tag-prediction backend not connected)")
+    print("Playlist request (preview only; ranking and playlist writer not connected)")
     print(f"  Moods: {', '.join(mood.value for mood in moods)}")
     print("  Matching: blend selected labels")
     print(f"  Tracks: {args.count}")
@@ -150,10 +176,11 @@ def main() -> None:
         tap.SubParserGroup(
             tap.SubParser("moods", tap.TypedArgs, help="List selectable mood labels"),
             tap.SubParser("create", CreateArgs, help="Create a playlist from selected mood tags"),
+            tap.SubParser("index", IndexArgs, help="Analyze library tracks and cache mood predictions"),
             description="Create local playlists from a fixed set of mood tags.",
         ),
         prog="sp",
-    ).bind(moods_list_cmd, create_cmd).run()
+    ).bind(moods_list_cmd, create_cmd, index_cmd).run()
 
 
 if __name__ == "__main__":

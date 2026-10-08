@@ -1,0 +1,12 @@
+# Curated runtime dependencies for vendored Music2Emotion inference.
+# Upstream pins torch/torchaudio; use separate Python 3.10 environment.
+librosa==0.10.2.post1
+mir_eval @ git+https://github.com/mir-evaluation/mir_eval.git@1fed5327e2a65c3294579beafa03a6498b4da3d0
+music21==9.3.0
+numpy==1.26.4
+pretty_midi==0.2.10
+PyYAML==6.0.1
+setuptools<81
+torch==2.3.1
+torchaudio==2.3.1
+transformers==4.44.0
