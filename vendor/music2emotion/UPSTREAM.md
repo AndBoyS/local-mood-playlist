@@ -13,7 +13,8 @@ Local patch in `music2emo.py`:
 - Put scratch output under caller-owned temporary work directory.
 - Decode M4A through librosa/FFmpeg where torchaudio's SoundFile backend cannot.
 - Select Apple MPS between CUDA and CPU; load checkpoints on CPU before moving models.
-- Compute only MERT hidden layers consumed by classifier before CPU transfer.
+- Stop MERT after transformer layer 7; classifier only consumes hidden states 6 and 7.
+- Keep segment embeddings on the selected device and average before device transfer; avoid per-segment NPY I/O.
 - Return raw canonical mood-tag probabilities alongside upstream thresholded tags.
 - Remove unused demo/training imports from inference module.
 - Pin MERT repository revision to `12af15fef9d0ac838c3f475bfbbf26d2060dd4f5`.

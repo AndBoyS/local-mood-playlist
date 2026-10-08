@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 from transformers import Wav2Vec2FeatureExtractor, AutoModel
 
 MERT_REVISION = "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5"
@@ -20,13 +19,16 @@ class FeatureExtractorMERT:
             revision=MERT_REVISION,
             trust_remote_code=True,
         ).to(self.device)
+        # Downstream classifier consumes only hidden states 6 and 7.
+        # Hidden state 7 is output of encoder layer 7; omit unused layers 8-12.
+        self.model.encoder.layers = torch.nn.ModuleList(list(self.model.encoder.layers[:7]))
         self.processor = Wav2Vec2FeatureExtractor.from_pretrained(
             self.model_name,
             revision=MERT_REVISION,
             trust_remote_code=True,
         )
 
-    def extract_features_from_segment(self, segment, sample_rate, save_path):
+    def extract_features_from_segment(self, segment, sample_rate):
         input_audio = segment.float()
         model_inputs = self.processor(input_audio, sampling_rate=sample_rate, return_tensors="pt")
         model_inputs = model_inputs.to(self.device)
@@ -38,5 +40,4 @@ class FeatureExtractorMERT:
             (model_outputs.hidden_states[6], model_outputs.hidden_states[7])
         )
         all_layer_hidden_states = selected_hidden_states.mean(dim=2).permute(1, 0, 2)
-        features = all_layer_hidden_states.cpu().detach().numpy()
-        np.save(save_path, features)
+        return all_layer_hidden_states.reshape(all_layer_hidden_states.shape[0], -1)
