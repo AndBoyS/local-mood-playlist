@@ -5,7 +5,9 @@ Source: [AMAAI-Lab/Music2Emotion](https://github.com/AMAAI-Lab/Music2Emotion)
 Pinned upstream commit: `c5f7984f78d9928b841f25bd05a47377c12c58ca` (2025-08-24).
 
 This is a sparse copy of upstream inference code, inference data, and the default
-`J_all.ckpt` model. Upstream MIT license is retained in `LICENSE`.
+`J_all.ckpt` model. Unused upstream training and preprocessing modules
+(`preprocess/`, demo helpers under `utils/`, and unused `model/` variants) are
+pruned. Upstream MIT license is retained in `LICENSE`.
 
 Local patch in `music2emo.py`:
 
