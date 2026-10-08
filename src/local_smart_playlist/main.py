@@ -95,7 +95,8 @@ PICKER_STYLE = questionary.Style(
 
 class CreateArgs(tap.TypedArgs):
     moods: list[Mood] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
-    count: int = tap.arg("-n", default=30, help="Playlist size (default: 30)")
+    count: int | None = tap.arg("-n", default=None, help="Playlist size (default: all ranked tracks)")
+    threshold: float = tap.arg("-t", "--threshold", default=0.5, help="Minimum mean mood probability (0-1]; default: 0.5")
     output: str | None = tap.arg("-o", default=None, help="Playlist destination (.m3u8); default: stdout")
     library: str | None = tap.arg(default=None, help="Library root for the default prediction cache")
     cache: str | None = tap.arg(default=None, help="Prediction cache file path (overrides --library)")
@@ -199,8 +200,11 @@ def _validate_playlist_output_path(output_path: Path, cache_path: Path | None) -
 
 
 def create_cmd(args: CreateArgs) -> None:
-    if args.count < 1:
+    if args.count is not None and args.count < 1:
         print("sp create: --count must be at least 1", file=sys.stderr)
+        raise SystemExit(2)
+    if args.threshold <= 0 or args.threshold > 1:
+        print("sp create: --threshold must be in (0, 1]", file=sys.stderr)
         raise SystemExit(2)
 
     moods = args.moods
@@ -228,7 +232,11 @@ def create_cmd(args: CreateArgs) -> None:
         print("Playlist request preview (not ranked; no cache selected)")
         print(f"  Moods: {', '.join(mood.value for mood in moods)}")
         print("  Matching: mean of selected mood probabilities")
-        print(f"  Tracks requested: {args.count}")
+        print(f"  Threshold: mean mood probability >= {args.threshold:g}")
+        if args.count is None:
+            print("  Tracks requested: all ranked tracks")
+        else:
+            print(f"  Tracks requested: {args.count}")
         if args.output is not None:
             print(f"  Would write: {args.output}")
         return
@@ -240,6 +248,7 @@ def create_cmd(args: CreateArgs) -> None:
             cache,
             tuple(MOOD_CANONICAL_TAG[mood] for mood in moods),
             limit=args.count,
+            min_score=args.threshold,
         )
         output_path = Path(args.output).expanduser() if args.output is not None else None
         if output_path is not None:
@@ -248,7 +257,9 @@ def create_cmd(args: CreateArgs) -> None:
         if args.dry_run:
             print("Playlist preview (not written)")
             print(f"  Moods: {', '.join(mood.value for mood in moods)}")
-            print(f"  Ranked tracks: {len(ranked)} of {args.count} requested")
+            requested = "all" if args.count is None else str(args.count)
+            print(f"  Ranked tracks: {len(ranked)} of {requested} requested")
+            print(f"  Threshold: mean mood probability >= {args.threshold:g}")
             for index, track in enumerate(ranked, start=1):
                 print(f"  {index:2d}. {track.score:.4f} {track.audio_path}")
             if output_path is not None:

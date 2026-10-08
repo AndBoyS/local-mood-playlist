@@ -19,13 +19,16 @@ def rank_cached_tracks(
     cache: PredictionCache,
     mood_tags: tuple[str, ...],
     *,
-    limit: int,
+    limit: int | None,
+    min_score: float,
 ) -> list[RankedTrack]:
     """Rank fresh cache entries by mean probability across requested mood tags."""
     if len(mood_tags) == 0:
         raise ValueError("at least one mood tag is required")
-    if limit < 1:
+    if limit is not None and limit < 1:
         raise ValueError("playlist size must be at least 1")
+    if not 0 < min_score <= 1:
+        raise ValueError("minimum score must be in (0, 1]")
 
     predictions = list(cache.iter_predictions())
     if len(predictions) == 0:
@@ -42,6 +45,9 @@ def rank_cached_tracks(
         ranked.append(RankedTrack(audio_path, score))
 
     ranked.sort(key=lambda track: (-track.score, track.audio_path.as_posix()))
+    ranked = [track for track in ranked if track.score >= min_score]
+    if limit is None:
+        return ranked
     return ranked[:limit]
 
 
