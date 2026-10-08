@@ -97,7 +97,9 @@ class CreateArgs(tap.TypedArgs):
     moods: list[Mood] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
     count: int | None = tap.arg("-n", default=None, help="Playlist size (default: all ranked tracks)")
     threshold: float = tap.arg("-t", "--threshold", default=0.5, help="Minimum mean mood probability (0-1]; default: 0.5")
-    output: str | None = tap.arg("-o", default=None, help="Playlist destination (.m3u8); default: stdout")
+    output: str | None = tap.arg(
+        "-o", default=None, help="Playlist destination (.m3u8); use {moods} for the selected moods"
+    )
     library: str | None = tap.arg(default=None, help="Library root for the default prediction cache")
     cache: str | None = tap.arg(default=None, help="Prediction cache file path (overrides --library)")
     dry_run: bool = tap.arg(default=False, help="Preview ranked tracks when cache exists; never write a playlist")
@@ -217,6 +219,10 @@ def create_cmd(args: CreateArgs) -> None:
         print("sp create: each mood label can be selected only once", file=sys.stderr)
         raise SystemExit(2)
 
+    output_arg = args.output
+    if output_arg is not None and "{moods}" in output_arg:
+        output_arg = output_arg.replace("{moods}", "-".join(mood.value for mood in moods))
+
     if args.cache is not None:
         cache_path = Path(args.cache).expanduser()
     elif args.library is not None:
@@ -237,8 +243,8 @@ def create_cmd(args: CreateArgs) -> None:
             print("  Tracks requested: all ranked tracks")
         else:
             print(f"  Tracks requested: {args.count}")
-        if args.output is not None:
-            print(f"  Would write: {args.output}")
+        if output_arg is not None:
+            print(f"  Would write: {output_arg}")
         return
 
     assert cache_path is not None
@@ -250,7 +256,7 @@ def create_cmd(args: CreateArgs) -> None:
             limit=args.count,
             min_score=args.threshold,
         )
-        output_path = Path(args.output).expanduser() if args.output is not None else None
+        output_path = Path(output_arg).expanduser() if output_arg is not None else None
         if output_path is not None:
             _validate_playlist_output_path(output_path, cache.path)
 
