@@ -4,6 +4,7 @@ import math
 import os
 import pickle
 import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeGuard
@@ -71,6 +72,14 @@ class PredictionCache:
         if entry is None or entry.size_bytes != size_bytes or entry.modified_ns != modified_ns:
             return None
         return entry.prediction
+
+    def iter_predictions(self) -> Iterator[tuple[Path, TrackPrediction]]:
+        """Yield fresh cached predictions with canonical audio paths."""
+        for raw_path in tuple(self._entries):
+            audio_path = Path(raw_path)
+            prediction = self.get(audio_path)
+            if prediction is not None:
+                yield audio_path, prediction
 
     def put(self, audio_path: Path, prediction: TrackPrediction) -> None:
         """Remember prediction for current audio-file version; call save() to persist."""

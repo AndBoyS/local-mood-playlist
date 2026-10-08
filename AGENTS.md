@@ -1,7 +1,5 @@
 # AGENTS.md
 
-Guidelines for coding agents working in this repo.
-
 ## Environment
 
 - Python 3.13, managed with uv. Run Python through `uv run ...`, never bare
@@ -12,11 +10,14 @@ Guidelines for coding agents working in this repo.
 ## Current scope
 
 - CLI exposes a fixed mood vocabulary through `sp moods` and
-  `sp create MOOD [MOOD ...]`; `sp create --dry-run` with no labels opens a
-  flat Questionary multi-select picker in a terminal.
+  `sp create MOOD [MOOD ...]`; `sp create` ranks cached predictions by the
+  mean probability of selected moods and writes M3U8 output to `--output` or
+  stdout. With a cache, `--dry-run` previews ranked tracks without writing;
+  without a cache, it previews the request only. With no labels in a terminal,
+  Questionary opens a flat multi-select picker.
 - `sp index DIRECTORY` runs vendored Music2Emotion in-process in the main
-  Python 3.13 environment and caches canonical tag scores. Playlist ranking
-  and writing are not implemented; `sp create --dry-run` previews only.
+  Python 3.13 environment and caches canonical tag scores. `sp create` reads
+  fresh cached predictions; it does not run model inference.
 - Keep mood labels mapped to the model's canonical tag names. User-facing
   aliases belong at the CLI boundary.
 

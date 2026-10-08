@@ -8,7 +8,10 @@ from time import monotonic
 import questionary
 import typed_argparse as tap
 
-from local_smart_playlist.indexing import ProgressUpdate, index_library
+from local_smart_playlist.indexing import ProgressUpdate, default_cache_path, index_library
+from local_smart_playlist.music2emotion import MODEL_VERSION
+from local_smart_playlist.playlists import rank_cached_tracks, render_m3u8
+from local_smart_playlist.predictions import PredictionCache
 
 
 class Mood(StrEnum):
@@ -42,6 +45,9 @@ class Mood(StrEnum):
     SOFT = "soft"
     UPBEAT = "upbeat"
 
+
+MOOD_CANONICAL_TAG: dict[Mood, str] = {mood: f"mood/theme---{mood.value}" for mood in Mood}
+MOOD_CANONICAL_TAG[Mood.DREAMY] = "mood/theme---dream"
 
 MOOD_DISPLAY: dict[Mood, str] = {
     Mood.CALM: "#8db9d8",
@@ -90,8 +96,10 @@ PICKER_STYLE = questionary.Style(
 class CreateArgs(tap.TypedArgs):
     moods: list[Mood] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
     count: int = tap.arg("-n", default=30, help="Playlist size (default: 30)")
-    output: str | None = tap.arg("-o", default=None, help="Playlist destination (.m3u8)")
-    dry_run: bool = tap.arg(default=False, help="Preview request without generating a playlist")
+    output: str | None = tap.arg("-o", default=None, help="Playlist destination (.m3u8); default: stdout")
+    library: str | None = tap.arg(default=None, help="Library root for the default prediction cache")
+    cache: str | None = tap.arg(default=None, help="Prediction cache file path (overrides --library)")
+    dry_run: bool = tap.arg(default=False, help="Preview ranked tracks when cache exists; never write a playlist")
 
 
 class IndexArgs(tap.TypedArgs):
@@ -183,10 +191,14 @@ def run_mood_picker() -> list[Mood] | None:
     return [Mood(label) for label in selected]
 
 
+def _validate_playlist_output_path(output_path: Path, cache_path: Path | None) -> None:
+    if output_path.suffix.lower() != ".m3u8":
+        raise ValueError("playlist output path must end in .m3u8")
+    if cache_path is not None and output_path.resolve() == cache_path.resolve():
+        raise ValueError("playlist output path must not overwrite prediction cache")
+
+
 def create_cmd(args: CreateArgs) -> None:
-    if not args.dry_run:
-        print("sp create: playlist generation is not wired yet; use --dry-run to preview", file=sys.stderr)
-        raise SystemExit(2)
     if args.count < 1:
         print("sp create: --count must be at least 1", file=sys.stderr)
         raise SystemExit(2)
@@ -201,12 +213,58 @@ def create_cmd(args: CreateArgs) -> None:
         print("sp create: each mood label can be selected only once", file=sys.stderr)
         raise SystemExit(2)
 
-    print("Playlist request (preview only; ranking and playlist writer not connected)")
-    print(f"  Moods: {', '.join(mood.value for mood in moods)}")
-    print("  Matching: blend selected labels")
-    print(f"  Tracks: {args.count}")
-    if args.output is not None:
-        print(f"  Output: {args.output}")
+    if args.cache is not None:
+        cache_path = Path(args.cache).expanduser()
+    elif args.library is not None:
+        cache_path = default_cache_path(Path(args.library))
+    else:
+        cache_path = None
+
+    if cache_path is None and not args.dry_run:
+        print("sp create: pass --cache or --library to use indexed predictions", file=sys.stderr)
+        raise SystemExit(2)
+
+    if args.dry_run and cache_path is None:
+        print("Playlist request preview (not ranked; no cache selected)")
+        print(f"  Moods: {', '.join(mood.value for mood in moods)}")
+        print("  Matching: mean of selected mood probabilities")
+        print(f"  Tracks requested: {args.count}")
+        if args.output is not None:
+            print(f"  Would write: {args.output}")
+        return
+
+    assert cache_path is not None
+    try:
+        cache = PredictionCache(cache_path, model_version=MODEL_VERSION)
+        ranked = rank_cached_tracks(
+            cache,
+            tuple(MOOD_CANONICAL_TAG[mood] for mood in moods),
+            limit=args.count,
+        )
+        output_path = Path(args.output).expanduser() if args.output is not None else None
+        if output_path is not None:
+            _validate_playlist_output_path(output_path, cache.path)
+
+        if args.dry_run:
+            print("Playlist preview (not written)")
+            print(f"  Moods: {', '.join(mood.value for mood in moods)}")
+            print(f"  Ranked tracks: {len(ranked)} of {args.count} requested")
+            for index, track in enumerate(ranked, start=1):
+                print(f"  {index:2d}. {track.score:.4f} {track.audio_path}")
+            if output_path is not None:
+                print(f"  Would write: {output_path}")
+            return
+
+        playlist = render_m3u8(ranked)
+        if output_path is None:
+            _ = sys.stdout.write(playlist)
+        else:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            _ = output_path.write_text(playlist, encoding="utf-8")
+            print(f"Created {len(ranked)}-track playlist: {output_path}", file=sys.stderr)
+    except (OSError, TypeError, ValueError, RuntimeError) as error:
+        print(f"sp create: {error}", file=sys.stderr)
+        raise SystemExit(2) from error
 
 
 def main() -> None:

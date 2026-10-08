@@ -1,16 +1,16 @@
 # local-smart-playlist
 
-CLI shell for local mood playlists. It exposes one unified, mood-ordered label
-list and can index audio with vendored Music2Emotion, caching raw mood scores.
-Playlist ranking and playlist writing are not wired yet.
+CLI for local mood playlists. It exposes one unified, mood-ordered label list,
+indexes audio with vendored Music2Emotion, and creates M3U8 playlists from cached
+mood scores.
 
 ## Setup
 
 ```console
 uv sync
 uv run sp moods
-uv run sp create --dry-run
 uv run sp index /path/to/music
+uv run sp create calm dreamy --library /path/to/music -o playlists/calm-dreamy.m3u8
 ```
 
 Multiple positional labels blend. With no labels, `sp create --dry-run` opens a flat,
@@ -25,8 +25,7 @@ requires explicit labels.
 - `sp moods` — list selectable labels in a flat, mood-ordered list.
 - `sp index DIRECTORY [--cache PATH] [--force]` — predict missing or changed
   `.mp3`, `.m4a`, `.wav`, and `.flac` files and cache raw canonical mood scores.
-- `sp create MOOD [MOOD ...] [-n COUNT] [-o PATH] [--dry-run]` — validate and
-  preview playlist request. Multiple labels blend by default.
+- `sp create MOOD [MOOD ...] [-n COUNT] [-o PATH] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the mean probability of selected moods and emit an M3U8 playlist. Without `-o`, playlist text goes to stdout.
 - `sp --help` — show CLI help.
 
 Music2Emotion runs in-process using the main Python 3.13 environment and
@@ -40,8 +39,11 @@ Predictions cache under the OS user cache directory by default. Cache records
 invalidate when audio metadata or model version changes. Cache is a local pickle;
 never load or share one from an untrusted source.
 
-`sp create` still requires `--dry-run`: it previews only and does not scan,
-rank, or write playlists. Ranking will consume cached scores in a later step.
-Picker uses Questionary; arrows navigate, Space toggles, Enter confirms, and
-Ctrl-C cancels.
+`sp create` consumes only fresh predictions already in cache; it does not run
+inference. `--cache` selects the exact cache file, while `--library` selects its
+default cache. With a cache, `--dry-run` shows ranked tracks without writing;
+without one, it previews only the request. Multiple selected moods receive
+equal weight. CLI label `dreamy` maps to model's canonical `dream` tag. Picker
+uses Questionary; arrows navigate, Space toggles, Enter confirms, and Ctrl-C
+cancels.
 
