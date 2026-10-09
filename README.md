@@ -25,7 +25,7 @@ requires explicit labels.
 - `sp moods` — list selectable labels in a flat, mood-ordered list.
 - `sp index DIRECTORY [--cache PATH] [--force]` — predict missing or changed
   `.mp3`, `.m4a`, `.wav`, and `.flac` files and cache raw canonical mood scores.
-- `sp create MOOD [MOOD ...] [-n COUNT] [-o PATH] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the mean probability of selected moods and emit an M3U8 playlist. Without `-o`, playlist text goes to stdout.
+- `sp create MOOD [MOOD ...] [-n COUNT] [-o PATH] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the mean probability of selected moods and emit an M3U8 playlist. With `-o`, track entries are relative to playlist location so playlist and library can move together while keeping their directory layout. Without `-o`, playlist text goes to stdout with absolute track paths.
 - `sp --help` — show CLI help.
 
 Music2Emotion runs in-process using the main Python 3.13 environment and

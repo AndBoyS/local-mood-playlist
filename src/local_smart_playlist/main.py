@@ -272,7 +272,7 @@ def create_cmd(args: CreateArgs) -> None:
                 print(f"  Would write: {output_path}")
             return
 
-        playlist = render_m3u8(ranked)
+        playlist = render_m3u8(ranked, output_path=output_path)
         if output_path is None:
             _ = sys.stdout.write(playlist)
         else:

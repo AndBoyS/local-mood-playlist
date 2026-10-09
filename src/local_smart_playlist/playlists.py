@@ -38,9 +38,7 @@ def rank_cached_tracks(
     for audio_path, prediction in predictions:
         missing_tags = [tag for tag in mood_tags if tag not in prediction.mood_scores]
         if len(missing_tags) > 0:
-            raise ValueError(
-                f"cached prediction for {audio_path} is missing mood tag(s): {', '.join(missing_tags)}"
-            )
+            raise ValueError(f"cached prediction for {audio_path} is missing mood tag(s): {', '.join(missing_tags)}")
         score = math.fsum(prediction.mood_scores[tag] for tag in mood_tags) / len(mood_tags)
         ranked.append(RankedTrack(audio_path, score))
 
@@ -51,11 +49,22 @@ def rank_cached_tracks(
     return ranked[:limit]
 
 
-def render_m3u8(tracks: list[RankedTrack]) -> str:
-    """Render ranked track paths as UTF-8-compatible extended M3U text."""
+def render_m3u8(tracks: list[RankedTrack], *, output_path: Path | None = None) -> str:
+    """Render extended M3U text, relative to output playlist when known."""
     lines = ["#EXTM3U"]
     for track in tracks:
         title = f"{track.audio_path.parent.name} - {track.audio_path.stem}"
         title = title.replace("\r", " ").replace("\n", " ")
-        lines.extend((f"#EXTINF:-1,{title}", track.audio_path.as_posix()))
+        audio_path = track.audio_path.expanduser().resolve()
+        if output_path is None:
+            playlist_entry = audio_path.as_posix()
+        else:
+            try:
+                playlist_entry = audio_path.relative_to(
+                    output_path.expanduser().resolve().parent,
+                    walk_up=True,
+                ).as_posix()
+            except ValueError:
+                playlist_entry = audio_path.as_posix()
+        lines.extend((f"#EXTINF:-1,{title}", playlist_entry))
     return "\n".join(lines) + "\n"
