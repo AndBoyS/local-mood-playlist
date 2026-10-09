@@ -45,7 +45,7 @@ def default_cache_path(library_path: Path) -> Path:
         cache_root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "Cache"
     else:
         cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return cache_root / "local-smart-playlist" / f"predictions-{library_id}.pkl"
+    return cache_root / "local-smart-playlist" / f"predictions-{library_id}.tsv"
 
 
 def index_library(

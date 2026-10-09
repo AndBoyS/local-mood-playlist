@@ -23,7 +23,7 @@ class IndexingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             audio_path = root / "track.mp3"
-            cache_path = root / "predictions.pkl"
+            cache_path = root / "predictions.tsv"
             _ = audio_path.write_bytes(b"audio")
             progress: list[tuple[int, int, Path | None]] = []
 
@@ -45,7 +45,7 @@ class IndexingTests(unittest.TestCase):
             root = Path(temporary_directory)
             good_path = root / "01-good.mp3"
             bad_path = root / "02-bad.mp3"
-            cache_path = root / "predictions.pkl"
+            cache_path = root / "predictions.tsv"
             _ = good_path.write_bytes(b"audio")
             _ = bad_path.write_bytes(b"audio")
             progress: list[ProgressUpdate] = []

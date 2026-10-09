@@ -1,15 +1,22 @@
 """Prediction records and persistent cache for local audio inference."""
 
+import csv
+import io
 import math
 import os
-import pickle
 import tempfile
+import urllib.parse
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeGuard
+from typing import TextIO, TypeGuard
 
 _CACHE_SCHEMA_VERSION = 1
+_META_PREFIX = "#sp-predictions"
+_SCHEMA_FIELD = f"schema={_CACHE_SCHEMA_VERSION}"
+_MODEL_VERSION_FIELD = "model_version="
+_META_COLUMN_COUNT = 3
+_HEADER_PREFIX = ("path", "size_bytes", "modified_ns", "valence", "arousal")
 _MIN_VA_SCORE = 1.0
 _MAX_VA_SCORE = 9.0
 
@@ -49,10 +56,12 @@ class _CacheEntry:
 
 
 class PredictionCache:
-    """Pickle-backed cache keyed by canonical path and audio-file metadata.
+    """TSV-backed cache keyed by canonical path and audio-file metadata.
 
-    Only load cache files created and controlled by this application: pickle is
-    executable serialization and must not be used with untrusted files.
+    Layout: one metadata row, one header row naming the mood-tag columns, then
+    one row per track. An empty score cell means the tag is absent for that
+    track. Only load cache files created and controlled by this application:
+    cache files must never come from an untrusted source.
     """
 
     def __init__(self, path: Path, model_version: str) -> None:
@@ -92,32 +101,23 @@ class PredictionCache:
     def save(self) -> None:
         """Atomically write cache; batch put() calls before saving to avoid repeated I/O."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "schema_version": _CACHE_SCHEMA_VERSION,
-            "model_version": self.model_version,
-            "entries": {
-                path: {
-                    "size_bytes": entry.size_bytes,
-                    "modified_ns": entry.modified_ns,
-                    "mood_scores": entry.prediction.mood_scores,
-                    "valence": entry.prediction.valence,
-                    "arousal": entry.prediction.arousal,
-                }
-                for path, entry in self._entries.items()
-            },
-        }
+        payload = self._encode_tsv()
 
         temporary_path: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
-                mode="wb",
+                mode="w",
+                encoding="utf-8",
+                newline="",
                 dir=self.path.parent,
                 prefix=f".{self.path.name}.",
                 suffix=".tmp",
                 delete=False,
             ) as temporary_file:
                 temporary_path = Path(temporary_file.name)
-                pickle.dump(payload, temporary_file, protocol=pickle.HIGHEST_PROTOCOL)
+                bytes_written = temporary_file.write(payload)
+                if bytes_written != len(payload):
+                    raise OSError(f"short cache write: {bytes_written} of {len(payload)} bytes")
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
             os.replace(temporary_path, self.path)
@@ -125,6 +125,33 @@ class PredictionCache:
         finally:
             if temporary_path is not None:
                 temporary_path.unlink(missing_ok=True)
+
+    def _encode_tsv(self) -> str:
+        """Serialize all entries; tag columns are the union across entries, sorted."""
+        tags = sorted({tag for entry in self._entries.values() for tag in entry.prediction.mood_scores})
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, delimiter="\t", lineterminator="\n", quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(
+            (
+                _META_PREFIX,
+                _SCHEMA_FIELD,
+                _MODEL_VERSION_FIELD + urllib.parse.quote(self.model_version, safe=""),
+            )
+        )
+        writer.writerow(_HEADER_PREFIX + tuple(tags))
+        for canonical_path, entry in self._entries.items():
+            scores = entry.prediction.mood_scores
+            writer.writerow(
+                (
+                    canonical_path,
+                    entry.size_bytes,
+                    entry.modified_ns,
+                    repr(entry.prediction.valence),
+                    repr(entry.prediction.arousal),
+                )
+                + tuple(repr(scores[tag]) if tag in scores else "" for tag in tags)
+            )
+        return buffer.getvalue()
 
     def _fingerprint(self, audio_path: Path) -> tuple[str, int, int] | None:
         try:
@@ -142,58 +169,71 @@ class PredictionCache:
         if not self.path.is_file():
             return {}
         try:
-            with self.path.open("rb") as cache_file:
-                payload: object = pickle.load(cache_file)
-        except (OSError, EOFError, pickle.UnpicklingError, AttributeError, ImportError, ValueError, TypeError):
+            with self.path.open("r", encoding="utf-8", newline="") as cache_file:
+                return self._decode_tsv(cache_file)
+        except (OSError, csv.Error, UnicodeDecodeError, EOFError):
             return {}
 
-        if not isinstance(payload, dict):
+    def _decode_tsv(self, cache_file: TextIO) -> dict[str, _CacheEntry]:
+        reader = csv.reader(cache_file, delimiter="\t", quoting=csv.QUOTE_MINIMAL)
+        meta = next(reader, None)
+        header = next(reader, None)
+        if meta is None or len(meta) != _META_COLUMN_COUNT or meta[0] != _META_PREFIX:
             return {}
-        if payload.get("schema_version") != _CACHE_SCHEMA_VERSION:
+        if meta[1] != _SCHEMA_FIELD or not meta[2].startswith(_MODEL_VERSION_FIELD):
             return {}
-        if payload.get("model_version") != self.model_version:
+        model_version = urllib.parse.unquote(meta[2][len(_MODEL_VERSION_FIELD) :])
+        if model_version != self.model_version:
             return {}
-        raw_entries = payload.get("entries")
-        if not isinstance(raw_entries, dict):
+        if header is None or len(header) < len(_HEADER_PREFIX):
             return {}
+        if tuple(header[: len(_HEADER_PREFIX)]) != _HEADER_PREFIX:
+            return {}
+        tags = tuple(header[len(_HEADER_PREFIX) :])
 
         entries: dict[str, _CacheEntry] = {}
-        for raw_path, raw_entry in raw_entries.items():
-            if not isinstance(raw_path, str) or not isinstance(raw_entry, dict):
+        for row in reader:
+            if len(row) == 0:
                 continue
-            size_bytes = raw_entry.get("size_bytes")
-            modified_ns = raw_entry.get("modified_ns")
-            if not _is_nonnegative_int(size_bytes) or not _is_nonnegative_int(modified_ns):
-                continue
-            prediction = _decode_prediction(raw_entry)
-            if prediction is not None:
-                entries[raw_path] = _CacheEntry(size_bytes, modified_ns, prediction)
+            entry = _decode_row(row, tags)
+            if entry is not None:
+                entries[row[0]] = entry
         return entries
 
 
-def _decode_prediction(value: dict[object, object]) -> TrackPrediction | None:
-    raw_scores = value.get("mood_scores")
-    raw_valence = value.get("valence")
-    raw_arousal = value.get("arousal")
-    if not isinstance(raw_scores, dict):
+def _decode_row(row: list[str], tags: tuple[str, ...]) -> _CacheEntry | None:
+    expected_columns = len(_HEADER_PREFIX) + len(tags)
+    if len(row) != expected_columns:
         return None
-    if not _is_number(raw_valence) or not _is_number(raw_arousal):
+    size_bytes = _parse_nonnegative_int(row[1])
+    modified_ns = _parse_nonnegative_int(row[2])
+    if size_bytes is None or modified_ns is None:
         return None
-
-    scores: dict[str, float] = {}
-    for tag, score in raw_scores.items():
-        if not isinstance(tag, str) or not isinstance(score, (int, float)) or isinstance(score, bool):
-            return None
-        scores[tag] = float(score)
     try:
-        return TrackPrediction(scores, float(raw_valence), float(raw_arousal))
+        valence = float(row[3])
+        arousal = float(row[4])
     except ValueError:
         return None
+    scores: dict[str, float] = {}
+    for tag, raw_score in zip(tags, row[len(_HEADER_PREFIX) :], strict=True):
+        if raw_score == "":
+            continue
+        try:
+            scores[tag] = float(raw_score)
+        except ValueError:
+            return None
+    try:
+        prediction = TrackPrediction(scores, valence, arousal)
+    except ValueError:
+        return None
+    return _CacheEntry(size_bytes, modified_ns, prediction)
+
+
+def _parse_nonnegative_int(value: str) -> int | None:
+    if len(value) == 0 or not (value.isascii() and value.isdigit()):
+        return None
+    return int(value)
 
 
 def _is_number(value: object) -> TypeGuard[int | float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-def _is_nonnegative_int(value: object) -> TypeGuard[int]:
-    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
