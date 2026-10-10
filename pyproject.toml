@@ -16,6 +16,7 @@ dependencies = [
     "torchaudio>=2.11",
     "transformers>=4.57.6,<5",
     "typed-argparse>=0.3.1",
+    "zstandard>=0.25.0",
 ]
 
 [project.scripts]

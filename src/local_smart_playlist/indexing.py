@@ -59,9 +59,7 @@ def index_library(
     root = library_path.expanduser().resolve(strict=True)
     if not root.is_dir():
         raise ValueError(f"music library path is not a directory: {root}")
-    audio_files = sorted(
-        path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in _AUDIO_SUFFIXES
-    )
+    audio_files = sorted(path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in _AUDIO_SUFFIXES)
     if len(audio_files) == 0:
         raise ValueError(f"no supported audio files found in {root}")
 

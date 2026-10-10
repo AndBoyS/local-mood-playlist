@@ -1,30 +1,31 @@
 import torch
+from pathlib import Path
 from transformers import Wav2Vec2FeatureExtractor, AutoModel
-
-MERT_REVISION = "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5"
 
 
 class FeatureExtractorMERT:
-    def __init__(self, model_name="m-a-p/MERT-v1-95M", device = "None", sr=24000):
-        self.model_name = model_name
-        self.sr = sr
-        if device == "None":
-            use_cuda = torch.cuda.is_available()
-            device = torch.device("cuda" if use_cuda else "cpu")
-        else:
-            self.device = device
+    def __init__(self, model_name: str | Path, device: torch.device, sr: int) -> None:
+        """Load the project-cached MERT snapshot on the requested device.
 
+        ``model_name`` must be the local snapshot directory staged by
+        ``assets.stage_mert_weights``; a missing snapshot directory fails
+        construction instead of silently fetching from the hub.
+        """
+        self.sr = sr
+        self.device = torch.device(device)
+        mert_dir = Path(model_name).resolve()
+        if not mert_dir.is_dir():
+            raise FileNotFoundError(f"MERT snapshot directory missing: {mert_dir}")
         self.model = AutoModel.from_pretrained(
-            self.model_name,
-            revision=MERT_REVISION,
+            mert_dir,
             trust_remote_code=True,
         ).to(self.device)
+
         # Downstream classifier consumes only hidden states 6 and 7.
-        # Hidden state 7 is output of encoder layer 7; omit unused layers 8-12.
+        # They are outputs of encoder layers 5 and 6; omit unused layers 7-11.
         self.model.encoder.layers = torch.nn.ModuleList(list(self.model.encoder.layers[:7]))
         self.processor = Wav2Vec2FeatureExtractor.from_pretrained(
-            self.model_name,
-            revision=MERT_REVISION,
+            mert_dir,
             trust_remote_code=True,
         )
 

@@ -12,6 +12,8 @@ import mir_eval
 import numpy as np
 import torch
 import torchaudio.transforms as T
+from safetensors import safe_open
+from safetensors.torch import load_file
 from music21 import note, stream
 
 from model.linear_mt_attn_ck import FeedforwardModelMTAttnCK
@@ -43,17 +45,17 @@ shift_major_dic = {
 }
 
 shift_minor_dic = {
-    'A': 0, 'A#': 1, 'B': 2, 'C': 3, 'C#': 4, 'D': 5,  
-    'D#': 6, 'E': 7, 'F': 8, 'F#': 9, 'G': 10, 'G#': 11, 
+    'A': 0, 'A#': 1, 'B': 2, 'C': 3, 'C#': 4, 'D': 5,
+    'D#': 6, 'E': 7, 'F': 8, 'F#': 9, 'G': 10, 'G#': 11,
 }
 
 flat_to_sharp_mapping = {
-    "Cb": "B", 
-    "Db": "C#", 
-    "Eb": "D#", 
-    "Fb": "E", 
-    "Gb": "F#", 
-    "Ab": "G#", 
+    "Cb": "B",
+    "Db": "C#",
+    "Eb": "D#",
+    "Fb": "E",
+    "Gb": "F#",
+    "Ab": "G#",
     "Bb": "A#"
 }
 
@@ -80,17 +82,17 @@ def normalize_chord(file_path, key, key_type='major'):
 
         if key in minor_major_dic2:
             key = minor_major_dic2[key]
-        
+
         shift = 0
-        
+
         if key_type == "major":
             new_key = "C major"
-            
+
             shift = shift_major_dic[key]
         else:
             new_key = "A minor"
             shift = shift_minor_dic[key]
-    
+
     converted_lines = []
     for line in lines:
         if line.strip():  # Skip empty lines
@@ -115,9 +117,9 @@ def normalize_chord(file_path, key, key_type='major'):
                 new_idx = (pnum - shift)%12
                 newchord = PITCH_CLASS[new_idx]
                 newchordnorm = newchord
-            
+
             converted_lines.append(f"{start_time} {end_time} {newchordnorm}\n")
-    
+
     return converted_lines
 
 def sanitize_key_signature(key):
@@ -159,7 +161,7 @@ def split_audio(waveform, sample_rate):
             end = min(start + segment_samples, total_samples)
             segment = waveform[start:end]
             segments.append(segment)
-    
+
     # Ensure we have at least one segment
     if len(segments) == 0:
         segments.append(waveform)
@@ -176,9 +178,9 @@ def split_audio(waveform, sample_rate):
 #         if end <= total_samples:
 #             segment = waveform[start:end]
 #             segments.append(segment)
-    
+
 #     # In case audio length is shorter than segment length.
-#     if len(segments) == 0: 
+#     if len(segments) == 0:
 #         segment = waveform
 #         segments.append(segment)
 
@@ -191,9 +193,10 @@ class Music2emo:
         model_weights: str | Path | None = None,
         work_dir: str | Path | None = None,
         chord_model_weights: str | Path | None = None,
+        mert_snapshot: str | Path,
     ) -> None:
         self.root = Path(__file__).resolve().parent
-        self.model_weights = Path(model_weights) if model_weights is not None else self.root / "saved_models" / "J_all.ckpt"
+        self.model_weights = Path(model_weights) if model_weights is not None else self.root / "saved_models" / "J_all.safetensors"
         if not self.model_weights.is_file():
             raise FileNotFoundError(f"Music2Emotion checkpoint missing: {self.model_weights}")
         if work_dir is None:
@@ -222,7 +225,7 @@ class Music2emo:
             raise RuntimeError(f"requested inference device is unavailable: {requested_device}")
         print(f"Music2Emotion device: {self.device}")
 
-        self.feature_extractor = FeatureExtractorMERT(model_name='m-a-p/MERT-v1-95M', device=self.device, sr=resample_rate)
+        self.feature_extractor = FeatureExtractorMERT(model_name=mert_snapshot, device=self.device, sr=resample_rate)
 
         self.music2emo_model = FeedforwardModelMTAttnCK(
             input_size= 768 * 2,
@@ -230,34 +233,33 @@ class Music2emo:
             output_size_regression=2
         )
 
-        checkpoint = torch.load(self.model_weights, map_location="cpu", weights_only=False)
-        state_dict = checkpoint["state_dict"]
-        
+        state_dict = load_file(self.model_weights)
+
         # Adjust the keys in the state_dict
         state_dict = {key.replace("model.", ""): value for key, value in state_dict.items()}
-        
         # Filter state_dict to match model's keys
         model_keys = set(self.music2emo_model.state_dict().keys())
         filtered_state_dict = {key: value for key, value in state_dict.items() if key in model_keys}
-        
+
         # Load the filtered state_dict and set the model to evaluation mode
         self.music2emo_model.load_state_dict(filtered_state_dict)
-        
+
         self.music2emo_model.to(self.device)
         self.music2emo_model.eval()
 
         self.chord_config = HParams.load(self.root / "inference/data/run_config.yaml")
         self.chord_config.feature['large_voca'] = True
         self.chord_config.model['num_chords'] = 170
-        chord_model_path = Path(chord_model_weights) if chord_model_weights is not None else self.root / "inference/data/btc_model_large_voca.pt"
+        chord_model_path = Path(chord_model_weights) if chord_model_weights is not None else self.root / "inference/data/btc_model_large_voca.safetensors"
         if not chord_model_path.is_file():
-            raise FileNotFoundError(f"Music2Emotion chord checkpoint missing: {chord_model_path}")
-        # Trusted vendored checkpoint includes NumPy scalars; PyTorch 2.6+ defaults to weights_only=True.
-        chord_checkpoint = torch.load(chord_model_path, map_location="cpu", weights_only=False)
-        self.chord_mean = chord_checkpoint['mean']
-        self.chord_std = chord_checkpoint['std']
+            raise FileNotFoundError(f"Music2Emotion chord weights missing: {chord_model_path}")
+        chord_state = load_file(chord_model_path)
+        with safe_open(chord_model_path, framework="pt") as f:
+            chord_metadata = f.metadata() or {}
+        self.chord_mean = float(chord_metadata['mean'])
+        self.chord_std = float(chord_metadata['std'])
         self.chord_model = BTC_model(config=self.chord_config.model).to(self.device)
-        self.chord_model.load_state_dict(chord_checkpoint['model'])
+        self.chord_model.load_state_dict(chord_state)
         self.chord_model.eval()
         self.idx_to_chord = idx2voca_chord()
 
@@ -265,18 +267,18 @@ class Music2emo:
 
         feature_dir = self.work_dir / "temp_out"
         output_dir = self.work_dir / "output"
-        
+
         if feature_dir.exists():
             shutil.rmtree(str(feature_dir))
         if output_dir.exists():
             shutil.rmtree(str(output_dir))
-        
+
         feature_dir.mkdir(parents=True)
         output_dir.mkdir(parents=True)
 
         warnings.filterwarnings('ignore')
         logger.logging_verbosity(1)
-        
+
         # use_cuda = torch.cuda.is_available()
         # device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -337,8 +339,8 @@ class Music2emo:
         except:
             logger.info("audio file failed to load : %s" % audio_path)
             assert(False)
-            
-        
+
+
         feature = feature.T
         feature = (feature - mean) / std
         time_unit = feature_per_second
@@ -402,7 +404,7 @@ class Music2emo:
                         starts.append(start_time), ends.append(interval[0]), pitchs.append(p + 48)
                     start_time = interval[0]
                     label = tmp_label
-                if i == (len(intervals) - 1): 
+                if i == (len(intervals) - 1):
                     if label == 1.0:
                         starts.append(start_time), ends.append(interval[1]), pitchs.append(p + 48)
 
@@ -434,25 +436,25 @@ class Music2emo:
         key_signature = sanitize_key_signature(key_parts[0])  # Sanitize key signature
         key_type = key_parts[1] if len(key_parts) > 1 else 'major'
 
-        # --- Key feature (Tonic and Mode separation) --- 
+        # --- Key feature (Tonic and Mode separation) ---
         if key_signature == "None":
             mode = "major"
         else:
             mode = key_signature.split()[-1]
-        
+
         encoded_mode = mode_to_idx.get(mode, 0)
         mode_tensor = torch.tensor([encoded_mode], dtype=torch.long).to(self.device)
 
         converted_lines = normalize_chord(save_path, key_signature, key_type)
 
         lab_norm_path = save_path[:-4] + "_norm.lab"
-        
+
         # Write the converted lines to the new file
         with open(lab_norm_path, 'w') as f:
             f.writelines(converted_lines)
 
         chords = []
-        
+
         if not os.path.exists(lab_norm_path):
             chords.append((float(0), float(0), "N"))
         else:
@@ -506,7 +508,7 @@ class Music2emo:
         classification_output, regression_output = self.music2emo_model(model_input_dic)
         probs = torch.sigmoid(classification_output)
 
-        
+
 
         tag_list = np.load(self.root / "inference/data/tag_list.npy")[127:]
         mood_list = [str(tag).replace("mood/theme---", "") for tag in tag_list]
