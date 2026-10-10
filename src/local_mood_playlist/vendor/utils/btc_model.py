@@ -1,8 +1,5 @@
 from .transformer_modules import *
 from .transformer_modules import _gen_timing_signal, _gen_bias_mask
-from .hparams import HParams
-
-use_cuda = torch.cuda.is_available()
 
 class self_attention_block(nn.Module):
     def __init__(self, hidden_size, total_key_depth, total_value_depth, filter_size, num_heads,
@@ -139,9 +136,6 @@ class BTC_model(nn.Module):
     def __init__(self, config):
         super(BTC_model, self).__init__()
 
-        self.timestep = config['timestep']
-        self.probs_out = config['probs_out']
-
         params = (config['feature_size'],
                   config['hidden_size'],
                   config['num_layers'],
@@ -156,43 +150,6 @@ class BTC_model(nn.Module):
                   config['relu_dropout'])
 
         self.self_attn_layers = bi_directional_self_attention_layers(*params)
-        self.output_layer = SoftmaxOutputLayer(hidden_size=config['hidden_size'], output_size=config['num_chords'], probs_out=config['probs_out'])
-
-    def forward(self, x, labels):
-        labels = labels.view(-1, self.timestep)
-        # Output of Bi-directional Self-attention Layers
-        self_attn_output, weights_list = self.self_attn_layers(x)
-
-        # return logit values for CRF
-        if self.probs_out is True:
-            logits = self.output_layer(self_attn_output)
-            return logits
-
-        # Output layer and Soft-max
-        prediction,second = self.output_layer(self_attn_output)
-        prediction = prediction.view(-1)
-        second = second.view(-1)
-
-        # Loss Calculation
-        loss = self.output_layer.loss(self_attn_output, labels)
-        return prediction, loss, weights_list, second
-
-if __name__ == "__main__":
-    config = HParams.load("run_config.yaml")
-    device = torch.device("cuda" if use_cuda else "cpu")
-
-    batch_size = 2
-    timestep = 108
-    feature_size = 144
-    num_chords = 25
-
-    features = torch.randn(batch_size,timestep,feature_size,requires_grad=True).to(device)
-    chords = torch.randint(25,(batch_size*timestep,)).to(device)
-
-    model = BTC_model(config=config.model).to(device)
-
-    prediction, loss, weights_list, second = model(features, chords)
-    print(prediction.size())
-    print(loss)
+        self.output_layer = SoftmaxOutputLayer(hidden_size=config['hidden_size'], output_size=config['num_chords'])
 
 

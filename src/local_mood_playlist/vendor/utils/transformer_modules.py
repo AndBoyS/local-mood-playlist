@@ -56,16 +56,11 @@ class OutputLayer(nn.Module):
     Abstract base class for output layer.
     Handles projection to output labels
     """
-    def __init__(self, hidden_size, output_size, probs_out=False):
+    def __init__(self, hidden_size, output_size):
         super(OutputLayer, self).__init__()
-        self.output_size = output_size
         self.output_projection = nn.Linear(hidden_size, output_size)
-        self.probs_out = probs_out
         self.lstm = nn.LSTM(input_size=hidden_size, hidden_size=int(hidden_size/2), batch_first=True, bidirectional=True)
-        self.hidden_size = hidden_size
 
-    def loss(self, hidden, labels):
-        raise NotImplementedError('Must implement {}.loss'.format(self.__class__.__name__))
 
 class SoftmaxOutputLayer(OutputLayer):
     """
@@ -78,15 +73,7 @@ class SoftmaxOutputLayer(OutputLayer):
         topk, indices = torch.topk(probs, 2)
         predictions = indices[:,:,0]
         second = indices[:,:,1]
-        if self.probs_out is True:
-            return logits
-            # return probs
         return predictions, second
-
-    def loss(self, hidden, labels):
-        logits = self.output_projection(hidden)
-        log_probs = F.log_softmax(logits, -1)
-        return F.nll_loss(log_probs.view(-1, self.output_size), labels.view(-1))
 
 class MultiHeadAttention(nn.Module):
     """

@@ -32,9 +32,6 @@ pitch_num_dic = {
     'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11
 }
 
-minor_major_dic = {
-    'D-':'C#', 'E-':'D#', 'G-':'F#', 'A-':'G#', 'B-':'A#'
-}
 minor_major_dic2 = {
     'Db':'C#', 'Eb':'D#', 'Gb':'F#', 'Ab':'G#', 'Bb':'A#'
 }
@@ -47,16 +44,6 @@ shift_major_dic = {
 shift_minor_dic = {
     'A': 0, 'A#': 1, 'B': 2, 'C': 3, 'C#': 4, 'D': 5,
     'D#': 6, 'E': 7, 'F': 8, 'F#': 9, 'G': 10, 'G#': 11,
-}
-
-flat_to_sharp_mapping = {
-    "Cb": "B",
-    "Db": "C#",
-    "Eb": "D#",
-    "Fb": "E",
-    "Gb": "F#",
-    "Ab": "G#",
-    "Bb": "A#"
 }
 
 segment_duration = 30
@@ -168,25 +155,6 @@ def split_audio(waveform, sample_rate):
 
     return segments
 
-# def split_audio(waveform, sample_rate):
-#     segment_samples = segment_duration * sample_rate
-#     total_samples = waveform.size(0)
-
-#     segments = []
-#     for start in range(0, total_samples, segment_samples):
-#         end = start + segment_samples
-#         if end <= total_samples:
-#             segment = waveform[start:end]
-#             segments.append(segment)
-
-#     # In case audio length is shorter than segment length.
-#     if len(segments) == 0:
-#         segment = waveform
-#         segments.append(segment)
-
-#     return segments
-
-
 class Music2emo:
     def __init__(
         self,
@@ -267,21 +235,14 @@ class Music2emo:
     def predict(self, audio: str | Path, threshold: float = 0.5) -> dict[str, object]:
 
         feature_dir = self.work_dir / "temp_out"
-        output_dir = self.work_dir / "output"
 
         if feature_dir.exists():
             shutil.rmtree(str(feature_dir))
-        if output_dir.exists():
-            shutil.rmtree(str(output_dir))
 
         feature_dir.mkdir(parents=True)
-        output_dir.mkdir(parents=True)
 
         warnings.filterwarnings('ignore')
         logger.logging_verbosity(1)
-
-        # use_cuda = torch.cuda.is_available()
-        # device = torch.device("cuda" if use_cuda else "cpu")
 
         original_waveform, sample_rate = _load_audio(audio)
         waveform = torch.from_numpy(original_waveform)
@@ -341,7 +302,6 @@ class Music2emo:
             logger.info("audio file failed to load : %s" % audio_path)
             assert(False)
 
-
         feature = feature.T
         feature = (feature - mean) / std
         time_unit = feature_per_second
@@ -385,8 +345,6 @@ class Music2emo:
         with open(save_path, 'w') as f:
             for line in lines:
                 f.write(line)
-
-        # logger.info("label file saved : %s" % save_path)
 
         # Build an in-memory score for key analysis (PrettyMIDI's default is 120 BPM).
         starts, ends, pitchs = list(), list(), list()
@@ -509,8 +467,6 @@ class Music2emo:
         classification_output, regression_output = self.music2emo_model(model_input_dic)
         probs = torch.sigmoid(classification_output)
 
-
-
         tag_list = np.load(self.root / "inference/data/tag_list.npy")[127:]
         mood_list = [str(tag).replace("mood/theme---", "") for tag in tag_list]
         score_values = probs.squeeze().tolist()
@@ -519,25 +475,7 @@ class Music2emo:
         predicted_moods = [mood_list[i] for i, score in enumerate(score_values) if score > threshold]
         mood_scores = {str(tag): float(score) for tag, score in zip(tag_list, score_values, strict=True)}
 
-        # Print the results
-        # print("Predicted Mood Tags:", predicted_moods)
-
         valence, arousal = regression_output.squeeze().tolist()
-
-        # Print results
-        # print("\n🎵 **Music Emotion Recognition Results** 🎵")
-        # print("-" * 50)
-        # print(f"🎭 **Predicted Mood Tags:** {', '.join(predicted_moods) if predicted_moods else 'None'}")
-        # print(f"💖 **Valence:** {valence:.2f} (Scale: 1-9)")
-        # print(f"⚡ **Arousal:** {arousal:.2f} (Scale: 1-9)")
-        # print("-" * 50)
-
-        # self.model.eval()
-        # self.modelReg.eval()
-        # with torch.set_grad_enabled(False):
-            # f_path_midi = output_dir / "output.mid"
-            # f_path_flac = output_dir / "output.flac"
-            # f_path_video_out = output_dir / "output.mp4"
 
         model_output_dic = {
             "valence": valence,

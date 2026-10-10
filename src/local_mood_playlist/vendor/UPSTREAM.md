@@ -7,7 +7,10 @@ Pinned upstream commit: `c5f7984f78d9928b841f25bd05a47377c12c58ca` (2025-08-24).
 This is a sparse copy of upstream inference code, inference data, and the default
 `J_all.ckpt` model. Unused upstream training and preprocessing modules
 (`preprocess/`, demo helpers under `utils/`, and unused `model/` variants) are
-pruned. Upstream MIT license is retained in `LICENSE`.
+pruned, as are the unused per-file eval helpers in `utils/mir_eval_modules.py`
+and `utils/logger.py` plus the unused
+`inference/data/chord.json` and `inference/data/chord_inv.json` lookup tables.
+Upstream MIT license is retained in `LICENSE`.
 
 The large model payloads are not stored in git. They are pre-transformed
 (`state_dict` safetensors conversion, scalar metadata extraction, MERT trimmed
@@ -41,6 +44,12 @@ Local patch in `music2emo.py`:
 - Require the project-cache MERT snapshot at construction; no hub fallback
   (a missing staged snapshot fails loudly instead of fetching an un-pinned
   revision from Hugging Face).
+
+The Music2Emotion local patch also prunes dead upstream training paths from
+the vendored inference modules: `BTC_model.forward` (and its `loss`/
+`probs_out` chain through `OutputLayer`/`SoftmaxOutputLayer`), the unused
+scoring helpers, and the unused per-tensor flags. Only the layer modules the
+inference entrypoint calls (`self_attn_layers`, `output_layer`) remain.
 
 The Music2Emotion code is MIT-licensed, but the MERT checkpoint downloaded from
 Hugging Face is licensed CC BY-NC 4.0. This dependency restricts use to
