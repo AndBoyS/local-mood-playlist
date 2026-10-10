@@ -27,7 +27,7 @@ from typing import Literal
 
 import zstandard as zstd
 
-from local_smart_playlist.const import CACHE_DIR
+from local_mood_playlist.const import CACHE_DIR
 
 BundleName = Literal["music2emo", "mert"]
 

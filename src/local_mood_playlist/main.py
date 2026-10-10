@@ -8,10 +8,10 @@ from time import monotonic
 import questionary
 import typed_argparse as tap
 
-from local_smart_playlist.indexing import ProgressUpdate, default_cache_path, index_library
-from local_smart_playlist.music2emotion import MODEL_VERSION
-from local_smart_playlist.playlists import rank_cached_tracks, render_m3u8
-from local_smart_playlist.predictions import PredictionCache
+from local_mood_playlist.indexing import ProgressUpdate, default_cache_path, index_library
+from local_mood_playlist.music2emotion import MODEL_VERSION
+from local_mood_playlist.playlists import rank_cached_tracks, render_m3u8
+from local_mood_playlist.predictions import PredictionCache
 
 
 class Mood(StrEnum):

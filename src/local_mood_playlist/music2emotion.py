@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from local_smart_playlist.assets import ensure_bundles, mert_cache_dir, stage_mert_weights
-from local_smart_playlist.predictions import TrackPrediction
+from local_mood_playlist.assets import ensure_bundles, mert_cache_dir, stage_mert_weights
+from local_mood_playlist.predictions import TrackPrediction
 
 if TYPE_CHECKING:
-    from local_smart_playlist.vendor.music2emo import Music2emo
+    from local_mood_playlist.vendor.music2emo import Music2emo
 
 MODEL_VERSION = "m2e-c5f7984-j95926289-btc11c6ed-tags-c53cee67-mert12af15fe-patch2"
 
@@ -18,7 +18,7 @@ def _load_model() -> Music2emo:
     bundles = ensure_bundles()
     snapshot = stage_mert_weights(mert_cache_dir())
 
-    from local_smart_playlist.vendor.music2emo import Music2emo  # noqa: PLC0415
+    from local_mood_playlist.vendor.music2emo import Music2emo  # noqa: PLC0415
 
     try:
         model = Music2emo(

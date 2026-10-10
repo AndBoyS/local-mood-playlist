@@ -9,7 +9,7 @@ the Hugging Face repo. ``--upload`` pushes the staging directory
 uv run scripts/publish_assets.py --upload
 
 The printed upload commit SHA becomes ``VENDORED_REVISION`` in
-``src/local_smart_playlist/assets.py``.
+``src/local_mood_playlist/assets.py``.
 """
 
 import argparse
@@ -24,8 +24,8 @@ import zstandard as zstd
 from huggingface_hub import HfApi
 from safetensors.torch import save as save_safetensors
 
-from local_smart_playlist.assets import BUNDLE_FILES, VENDORED_REPO, dir_digest
-from local_smart_playlist.const import CACHE_DIR, REPO_ROOT
+from local_mood_playlist.assets import BUNDLE_FILES, VENDORED_REPO, dir_digest
+from local_mood_playlist.const import CACHE_DIR, REPO_ROOT
 
 # Upstream provenance (see README generated below for the full chain).
 MUSIC2EMO_UPSTREAM_REPO = "amaai-lab/music2emo"
@@ -206,7 +206,7 @@ def upload(staging: Path) -> str:
 
 def update_assets_pins(digests: dict[str, str]) -> None:
     """Write the bundle-dir digest pins into assets.py."""
-    path = REPO_ROOT / "src" / "local_smart_playlist" / "assets.py"
+    path = REPO_ROOT / "src" / "local_mood_playlist" / "assets.py"
     text = path.read_text(encoding="utf-8")
     for name in BUNDLE_FILES:
         marker = f'"{name}": "'
@@ -238,7 +238,7 @@ def main() -> None:
         print(f"published as revision {revision}")
         update_assets_pins(digests)
         print("Snapshot-dir digests now pinned in assets.py (matches this upload's bytes).")
-        print('Set VENDORED_REVISION = "' + revision + '" in src/local_smart_playlist/assets.py.')
+        print('Set VENDORED_REVISION = "' + revision + '" in src/local_mood_playlist/assets.py.')
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from local_smart_playlist.predictions import PredictionCache
+from local_mood_playlist.predictions import PredictionCache
 
 
 @dataclass(frozen=True)

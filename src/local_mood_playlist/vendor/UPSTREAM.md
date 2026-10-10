@@ -14,7 +14,7 @@ The large model payloads are not stored in git. They are pre-transformed
 to 7 transformer layers + zstd, config patch) by
 `scripts/publish_assets.py` once per upstream revision and published to the
 vendored Hugging Face repo `music2emo-inference-assets`. On first use
-`src/local_smart_playlist/assets.py` downloads the pinned vendored revision,
+`src/local_mood_playlist/assets.py` downloads the pinned vendored revision,
 verifies whole-directory digests, and caches under the project `.cache`
 directory. The pickle checkpoints from upstream are never executed.
 
@@ -49,4 +49,4 @@ non-commercial settings unless separate permission is obtained.
 Runtime dependencies are managed by the main project environment in
 `pyproject.toml`/`uv.lock`. This project uses Python 3.13-compatible PyTorch
 and Transformers versions; MERT weights are managed by the project asset cache
-(see `src/local_smart_playlist/assets.py`).
+(see `src/local_mood_playlist/assets.py`).

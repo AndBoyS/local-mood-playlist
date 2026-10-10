@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-moodpl = "local_smart_playlist.main:main"
+moodpl = "local_mood_playlist.main:main"
 
 [dependency-groups]
 dev = [
@@ -37,11 +37,11 @@ exclude-newer = "7 days"
 exclude-newer-package = { pyrefly = "2099-01-01" }
 
 [tool.uv.build-backend]
-module-name = "local_smart_playlist"
+module-name = "local_mood_playlist"
 
 [tool.ruff]
 line-length = 120
-extend-exclude = ["src/local_smart_playlist/vendor/**"]
+extend-exclude = ["src/local_mood_playlist/vendor/**"]
 
 [tool.ruff.lint]
 select = [
@@ -79,7 +79,7 @@ max-positional-args = 2
 "tests/*" = ["PLC0415", "PLR2004", "PLR0917", "PT017", "TRY301"]
 
 [tool.pyrefly]
-project-excludes = ["src/local_smart_playlist/vendor/**"]
+project-excludes = ["src/local_mood_playlist/vendor/**"]
 use-ignore-files = false
 output-format = "min-text"
 min-severity = "warn"
