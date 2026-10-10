@@ -29,3 +29,4 @@
 - Validate values at input boundaries. Prefer `object` over `Any` for unknown
   data; use `Any` only for inherently dynamic APIs.
 - Don't do mock tests
+- Use git naming conventions
