@@ -41,7 +41,7 @@ module-name = "local_smart_playlist"
 
 [tool.ruff]
 line-length = 120
-extend-exclude = ["vendor/**"]
+extend-exclude = ["src/local_smart_playlist/vendor/**"]
 
 [tool.ruff.lint]
 select = [
@@ -79,7 +79,7 @@ max-positional-args = 2
 "tests/*" = ["PLC0415", "PLR2004", "PLR0917", "PT017", "TRY301"]
 
 [tool.pyrefly]
-project-excludes = ["vendor/music2emotion/**"]
+project-excludes = ["src/local_smart_playlist/vendor/**"]
 use-ignore-files = false
 output-format = "min-text"
 min-severity = "warn"

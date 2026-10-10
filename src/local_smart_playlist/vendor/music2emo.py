@@ -16,12 +16,12 @@ from safetensors import safe_open
 from safetensors.torch import load_file
 from music21 import note, stream
 
-from model.linear_mt_attn_ck import FeedforwardModelMTAttnCK
-from utils import logger
-from utils.btc_model import BTC_model
-from utils.hparams import HParams
-from utils.mert import FeatureExtractorMERT
-from utils.mir_eval_modules import audio_file_to_features, idx2voca_chord
+from .model.linear_mt_attn_ck import FeedforwardModelMTAttnCK
+from .utils import logger
+from .utils.btc_model import BTC_model
+from .utils.hparams import HParams
+from .utils.mert import FeatureExtractorMERT
+from .utils.mir_eval_modules import audio_file_to_features, idx2voca_chord
 
 logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
 
@@ -193,6 +193,7 @@ class Music2emo:
         model_weights: str | Path | None = None,
         work_dir: str | Path | None = None,
         chord_model_weights: str | Path | None = None,
+        *,
         mert_snapshot: str | Path,
     ) -> None:
         self.root = Path(__file__).resolve().parent
