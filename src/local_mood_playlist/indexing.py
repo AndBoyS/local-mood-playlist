@@ -1,12 +1,11 @@
 """Index local audio files into the persistent Music2Emotion prediction cache."""
 
 import hashlib
-import os
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from local_mood_playlist.const import CACHE_DIR
 from local_mood_playlist.music2emotion import MODEL_VERSION, Music2Emotion
 from local_mood_playlist.predictions import PredictionCache
 
@@ -36,16 +35,10 @@ class IndexSummary:
 
 
 def default_cache_path(library_path: Path) -> Path:
-    """Return user-cache path unique to this resolved library directory."""
+    """Return workspace-cache path unique to this resolved library directory."""
     resolved_library = library_path.expanduser().resolve(strict=True)
     library_id = hashlib.sha256(str(resolved_library).encode("utf-8")).hexdigest()[:20]
-    if sys.platform == "darwin":
-        cache_root = Path.home() / "Library" / "Caches"
-    elif os.name == "nt":
-        cache_root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "Cache"
-    else:
-        cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return cache_root / "local-mood-playlist" / f"predictions-{library_id}.tsv"
+    return CACHE_DIR / "predictions" / f"predictions-{library_id}.tsv"
 
 
 def index_library(

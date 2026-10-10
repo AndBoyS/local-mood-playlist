@@ -35,7 +35,7 @@ weights from Hugging Face and may take time. M4A files require FFmpeg on
 `PATH`. MERT is licensed CC BY-NC 4.0, so this integration is limited to
 non-commercial use unless you obtain separate permission.
 
-Predictions cache under the OS user cache directory by default. Cache records
+Predictions cache under the workspace `.cache` directory by default. Cache records
 invalidate when audio metadata or model version changes. Cache is a local pickle;
 never load or share one from an untrusted source.
 
