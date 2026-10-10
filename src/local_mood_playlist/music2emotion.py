@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from local_mood_playlist.assets import ensure_bundles, mert_cache_dir, stage_mert_weights
+from local_mood_playlist.assets import decompress_mert_weights, ensure_bundles, mert_cache_dir
 from local_mood_playlist.predictions import TrackPrediction
 
 if TYPE_CHECKING:
@@ -16,20 +16,15 @@ MODEL_VERSION = "m2e-c5f7984-j95926289-btc11c6ed-tags-c53cee67-mert12af15fe-patc
 
 def _load_model() -> Music2emo:
     bundles = ensure_bundles()
-    snapshot = stage_mert_weights(mert_cache_dir())
 
     from local_mood_playlist.vendor.music2emo import Music2emo  # noqa: PLC0415
 
-    try:
-        model = Music2emo(
+    with decompress_mert_weights(mert_cache_dir()) as snapshot:
+        return Music2emo(
             model_weights=bundles["music2emo/J_all.safetensors"],
             chord_model_weights=bundles["music2emo/btc_model_large_voca.safetensors"],
             mert_snapshot=snapshot,
         )
-    finally:
-        # Decompressed MERT weights are only needed for construction.
-        (snapshot / "model.safetensors").unlink(missing_ok=True)
-    return model
 
 
 class Music2Emotion:

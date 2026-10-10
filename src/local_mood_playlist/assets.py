@@ -21,7 +21,8 @@ from __future__ import annotations
 import hashlib
 import shutil
 import urllib.request
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -53,9 +54,6 @@ BUNDLE_FILES: dict[BundleName, list[str]] = {
         "mert/preprocessor_config.json",
     ],
 }
-
-# Staged decompressed MERT weights; not authoritative across runs.
-_MERT_STAGED_WEIGHTS = "model.safetensors"
 
 
 def asset_cache_root() -> Path:
@@ -138,27 +136,21 @@ def ensure_bundles() -> dict[str, Path]:
     return paths
 
 
-def stage_mert_weights(snapshot: Path, /) -> Path:
-    """Prepare the MERT snapshot with decompressed weights for model loading.
-
-    Decompresses ``model.safetensors.zst`` into the snapshot directory via an
-    atomic replace so interrupted runs cannot produce a torn file; the caller
-    must pass a snapshot verified by :func:`ensure_bundles` and unlink
-    ``model.safetensors`` after model construction (a leftover from a crashed
-    run is cleaned here before decompressing).
-    """
-    target = snapshot / _MERT_STAGED_WEIGHTS
+@contextmanager
+def decompress_mert_weights(snapshot: Path) -> Generator[Path]:
+    target = snapshot / "model.safetensors"
     # A staged leftover from a crashed run is never authoritative.
     target.unlink(missing_ok=True)
-    stage_path = snapshot / (_MERT_STAGED_WEIGHTS + ".tmp")
+    tmp_path = target.with_name(f"{target.name}.tmp")
     try:
         with (
             (snapshot / "model.safetensors.zst").open("rb") as source,
-            stage_path.open("wb") as out,
+            tmp_path.open("wb") as out,
             zstd.ZstdDecompressor().stream_reader(source) as reader,
         ):
             shutil.copyfileobj(reader, out, 1 << 20)
-        _ = stage_path.replace(target)
+        _ = tmp_path.replace(target)
     finally:
-        stage_path.unlink(missing_ok=True)
-    return snapshot
+        tmp_path.unlink(missing_ok=True)
+    yield snapshot
+    target.unlink(missing_ok=True)

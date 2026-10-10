@@ -4,16 +4,10 @@ from transformers import Wav2Vec2FeatureExtractor, AutoModel
 
 
 class FeatureExtractorMERT:
-    def __init__(self, model_name: str | Path, device: torch.device, sr: int) -> None:
-        """Load the project-cached MERT snapshot on the requested device.
-
-        ``model_name`` must be the local snapshot directory staged by
-        ``assets.stage_mert_weights``; a missing snapshot directory fails
-        construction instead of silently fetching from the hub.
-        """
+    def __init__(self, local_path: Path, device: torch.device, sr: int) -> None:
         self.sr = sr
         self.device = torch.device(device)
-        mert_dir = Path(model_name).resolve()
+        mert_dir = local_path.resolve()
         if not mert_dir.is_dir():
             raise FileNotFoundError(f"MERT snapshot directory missing: {mert_dir}")
         self.model = AutoModel.from_pretrained(

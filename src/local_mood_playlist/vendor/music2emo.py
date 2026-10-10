@@ -194,7 +194,7 @@ class Music2emo:
             raise RuntimeError(f"requested inference device is unavailable: {requested_device}")
         print(f"Music2Emotion device: {self.device}")
 
-        self.feature_extractor = FeatureExtractorMERT(model_name=mert_snapshot, device=self.device, sr=resample_rate)
+        self.feature_extractor = FeatureExtractorMERT(local_path=mert_snapshot, device=self.device, sr=resample_rate)
 
         self.music2emo_model = FeedforwardModelMTAttnCK(
             input_size= 768 * 2,
