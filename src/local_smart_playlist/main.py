@@ -150,7 +150,7 @@ def index_cmd(args: IndexArgs) -> None:
             on_progress=report_progress,
         )
     except (OSError, TypeError, ValueError, RuntimeError) as error:
-        print(f"sp index: {error}", file=sys.stderr)
+        print(f"moodpl index: {error}", file=sys.stderr)
         raise SystemExit(2) from error
     finally:
         if progress_active:
@@ -170,7 +170,7 @@ def index_cmd(args: IndexArgs) -> None:
 
 def run_mood_picker() -> list[Mood] | None:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        print("sp create: pass mood labels when running non-interactively", file=sys.stderr)
+        print("moodpl create: pass mood labels when running non-interactively", file=sys.stderr)
         raise SystemExit(2)
 
     choices = [
@@ -203,10 +203,10 @@ def _validate_playlist_output_path(output_path: Path, cache_path: Path | None) -
 
 def create_cmd(args: CreateArgs) -> None:
     if args.count is not None and args.count < 1:
-        print("sp create: --count must be at least 1", file=sys.stderr)
+        print("moodpl create: --count must be at least 1", file=sys.stderr)
         raise SystemExit(2)
     if args.threshold <= 0 or args.threshold > 1:
-        print("sp create: --threshold must be in (0, 1]", file=sys.stderr)
+        print("moodpl create: --threshold must be in (0, 1]", file=sys.stderr)
         raise SystemExit(2)
 
     moods = args.moods
@@ -216,7 +216,7 @@ def create_cmd(args: CreateArgs) -> None:
             print("No moods selected; cancelled.")
             return
     if len(set(moods)) != len(moods):
-        print("sp create: each mood label can be selected only once", file=sys.stderr)
+        print("moodpl create: each mood label can be selected only once", file=sys.stderr)
         raise SystemExit(2)
 
     output_arg = args.output
@@ -231,7 +231,7 @@ def create_cmd(args: CreateArgs) -> None:
         cache_path = None
 
     if cache_path is None and not args.dry_run:
-        print("sp create: pass --cache or --library to use indexed predictions", file=sys.stderr)
+        print("moodpl create: pass --cache or --library to use indexed predictions", file=sys.stderr)
         raise SystemExit(2)
 
     if args.dry_run and cache_path is None:
@@ -280,7 +280,7 @@ def create_cmd(args: CreateArgs) -> None:
             _ = output_path.write_text(playlist, encoding="utf-8")
             print(f"Created {len(ranked)}-track playlist: {output_path}", file=sys.stderr)
     except (OSError, TypeError, ValueError, RuntimeError) as error:
-        print(f"sp create: {error}", file=sys.stderr)
+        print(f"moodpl create: {error}", file=sys.stderr)
         raise SystemExit(2) from error
 
 
@@ -292,7 +292,7 @@ def main() -> None:
             tap.SubParser("index", IndexArgs, help="Analyze library tracks and cache mood predictions"),
             description="Create local playlists from a fixed set of mood tags.",
         ),
-        prog="sp",
+        prog="moodpl",
     ).bind(moods_list_cmd, create_cmd, index_cmd).run()
 
 

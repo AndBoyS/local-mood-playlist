@@ -9,14 +9,14 @@
 
 ## Current scope
 
-- CLI exposes a fixed mood vocabulary through `sp moods` and
-  `sp create MOOD [MOOD ...]`; `sp create` ranks cached predictions by the
+- CLI exposes a fixed mood vocabulary through `moodpl moods` and
+  `moodpl create MOOD [MOOD ...]`; `moodpl create` ranks cached predictions by the
   mean probability of selected moods and writes M3U8 output to `--output` or
   stdout. With a cache, `--dry-run` previews ranked tracks without writing;
   without a cache, it previews the request only. With no labels in a terminal,
   Questionary opens a flat multi-select picker.
-- `sp index DIRECTORY` runs vendored Music2Emotion in-process in the main
-  Python 3.13 environment and caches canonical tag scores. `sp create` reads
+- `moodpl index DIRECTORY` runs vendored Music2Emotion in-process in the main
+  Python 3.13 environment and caches canonical tag scores. `moodpl create` reads
   fresh cached predictions; it does not run model inference.
 - Keep mood labels mapped to the model's canonical tag names. User-facing
   aliases belong at the CLI boundary.

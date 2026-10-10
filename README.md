@@ -1,4 +1,4 @@
-# local-smart-playlist
+# local-mood-playlist
 
 CLI for local mood playlists. It exposes one unified, mood-ordered label list,
 indexes audio with vendored Music2Emotion, and creates M3U8 playlists from cached
@@ -8,12 +8,12 @@ mood scores.
 
 ```console
 uv sync
-uv run sp moods
-uv run sp index /path/to/music
-uv run sp create calm dreamy --library /path/to/music -o playlists/calm-dreamy.m3u8
+uv run moodpl moods
+uv run moodpl index /path/to/music
+uv run moodpl create calm dreamy --library /path/to/music -o playlists/calm-dreamy.m3u8
 ```
 
-Multiple positional labels blend. With no labels, `sp create --dry-run` opens a flat,
+Multiple positional labels blend. With no labels, `moodpl create --dry-run` opens a flat,
 multi-select picker; related labels appear near each other. Muted pastel colors
 give a rough visual cue: blue for subdued/reflective, pink for affectionate,
 yellow for bright, orange for active, and red for intense/action-like. Colors
@@ -22,11 +22,11 @@ requires explicit labels.
 
 ## Commands
 
-- `sp moods` — list selectable labels in a flat, mood-ordered list.
-- `sp index DIRECTORY [--cache PATH] [--force]` — predict missing or changed
+- `moodpl moods` — list selectable labels in a flat, mood-ordered list.
+- `moodpl index DIRECTORY [--cache PATH] [--force]` — predict missing or changed
   `.mp3`, `.m4a`, `.wav`, and `.flac` files and cache raw canonical mood scores.
-- `sp create MOOD [MOOD ...] [-n COUNT] [-o PATH] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the mean probability of selected moods and emit an M3U8 playlist. With `-o`, track entries are relative to playlist location so playlist and library can move together while keeping their directory layout. Without `-o`, playlist text goes to stdout with absolute track paths.
-- `sp --help` — show CLI help.
+- `moodpl create MOOD [MOOD ...] [-n COUNT] [-o PATH] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the mean probability of selected moods and emit an M3U8 playlist. With `-o`, track entries are relative to playlist location so playlist and library can move together while keeping their directory layout. Without `-o`, playlist text goes to stdout with absolute track paths.
+- `moodpl --help` — show CLI help.
 
 Music2Emotion runs in-process using the main Python 3.13 environment and
 PyTorch/MPS when available, else CPU. Set `SP_MUSIC2EMOTION_DEVICE` to `cpu`,
@@ -39,7 +39,7 @@ Predictions cache under the OS user cache directory by default. Cache records
 invalidate when audio metadata or model version changes. Cache is a local pickle;
 never load or share one from an untrusted source.
 
-`sp create` consumes only fresh predictions already in cache; it does not run
+`moodpl create` consumes only fresh predictions already in cache; it does not run
 inference. `--cache` selects the exact cache file, while `--library` selects its
 default cache. With a cache, `--dry-run` shows ranked tracks without writing;
 without one, it previews only the request. Multiple selected moods receive

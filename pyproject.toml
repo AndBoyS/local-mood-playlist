@@ -1,5 +1,5 @@
 [project]
-name = "local-smart-playlist"
+name = "local-mood-playlist"
 version = "0.1.0"
 description = "CLI for fixed-vocabulary mood playlists from a local music library."
 readme = "README.md"
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sp = "local_smart_playlist.main:main"
+moodpl = "local_smart_playlist.main:main"
 
 [dependency-groups]
 dev = [
@@ -34,6 +34,9 @@ build-backend = "uv_build"
 [tool.uv]
 exclude-newer = "7 days"
 exclude-newer-package = { pyrefly = "2099-01-01" }
+
+[tool.uv.build-backend]
+module-name = "local_smart_playlist"
 
 [tool.ruff]
 line-length = 120

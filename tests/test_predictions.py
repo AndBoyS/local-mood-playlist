@@ -67,7 +67,7 @@ class PredictionCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             cache_path = root / "predictions.tsv"
-            _ = cache_path.write_text("#sp-predictions\tschema=1\tmodel_version=nope\n")
+            _ = cache_path.write_text("#moodpl-predictions\tschema=1\tmodel_version=nope\n")
             assert PredictionCache(cache_path, model_version="test-model-v1")._entries == {}
 
 

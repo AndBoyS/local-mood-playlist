@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TextIO, TypeGuard
 
 _CACHE_SCHEMA_VERSION = 1
-_META_PREFIX = "#sp-predictions"
+_META_PREFIX = "#moodpl-predictions"
 _SCHEMA_FIELD = f"schema={_CACHE_SCHEMA_VERSION}"
 _MODEL_VERSION_FIELD = "model_version="
 _META_COLUMN_COUNT = 3
