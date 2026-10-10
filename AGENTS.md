@@ -4,7 +4,7 @@
 
 - Python 3.13, managed with uv. Run Python through `uv run ...`, never bare
   `python` or `pip`.
-- Lint: `uv run ruff check .`.
+- Lint: `uv run ruff check --fix`.
 - Types: `uv run pyrefly check` — strict preset. See [`docs/typing.md`](docs/typing.md).
 
 ## Current scope
@@ -28,3 +28,4 @@
   unnecessary abstractions.
 - Validate values at input boundaries. Prefer `object` over `Any` for unknown
   data; use `Any` only for inherently dynamic APIs.
+- Don't do mock tests
