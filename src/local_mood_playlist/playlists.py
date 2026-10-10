@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from local_mood_playlist.moods import MoodName
 from local_mood_playlist.predictions import PredictionCache
 
 
@@ -17,14 +19,14 @@ class RankedTrack:
 
 def rank_cached_tracks(
     cache: PredictionCache,
-    mood_tags: tuple[str, ...],
     *,
+    moods: Sequence[MoodName],
     limit: int | None,
     min_score: float,
 ) -> list[RankedTrack]:
-    """Rank fresh cache entries by mean probability across requested mood tags."""
-    if len(mood_tags) == 0:
-        raise ValueError("at least one mood tag is required")
+    """Rank fresh cache entries by mean probability across requested moods."""
+    if len(moods) == 0:
+        raise ValueError("at least one mood is required")
     if limit is not None and limit < 1:
         raise ValueError("playlist size must be at least 1")
     if not 0 < min_score <= 1:
@@ -36,10 +38,10 @@ def rank_cached_tracks(
 
     ranked: list[RankedTrack] = []
     for audio_path, prediction in predictions:
-        missing_tags = [tag for tag in mood_tags if tag not in prediction.mood_scores]
-        if len(missing_tags) > 0:
-            raise ValueError(f"cached prediction for {audio_path} is missing mood tag(s): {', '.join(missing_tags)}")
-        score = math.fsum(prediction.mood_scores[tag] for tag in mood_tags) / len(mood_tags)
+        missing_moods = [mood for mood in moods if mood not in prediction.mood_scores]
+        if len(missing_moods) > 0:
+            raise ValueError(f"cached prediction for {audio_path} is missing mood(s): {', '.join(missing_moods)}")
+        score = math.fsum(prediction.mood_scores[mood] for mood in moods) / len(moods)
         ranked.append(RankedTrack(audio_path, score))
 
     ranked.sort(key=lambda track: (-track.score, track.audio_path.as_posix()))

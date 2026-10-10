@@ -9,7 +9,7 @@ from local_mood_playlist.const import CACHE_DIR
 from local_mood_playlist.music2emotion import MODEL_VERSION, Music2Emotion
 from local_mood_playlist.predictions import PredictionCache
 
-_AUDIO_SUFFIXES = frozenset({".flac", ".m4a", ".mp3", ".wav"})
+_AUDIO_SUFFIXES = [".flac", ".m4a", ".mp3", ".wav"]
 _SAVE_EVERY = 25
 ProgressUpdate = tuple[int, int, Path | None]
 ProgressCallback = Callable[[ProgressUpdate], None]

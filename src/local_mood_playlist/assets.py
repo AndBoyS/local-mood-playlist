@@ -55,15 +55,8 @@ BUNDLE_FILES: dict[BundleName, list[str]] = {
     ],
 }
 
-
-def asset_cache_root() -> Path:
-    """Project-local cache directory for the vendored asset bundles."""
-    return CACHE_DIR / "assets" / VENDORED_REVISION
-
-
-def mert_cache_dir() -> Path:
-    """Project-local cache directory for the MERT snapshot files."""
-    return asset_cache_root() / "mert"
+ASSET_CACHE_ROOT = CACHE_DIR / "assets" / VENDORED_REVISION
+MERT_CACHE_DIR = ASSET_CACHE_ROOT / "mert"
 
 
 def _hf_url(repo: str, *, revision: str, repo_path: str) -> str:
@@ -103,7 +96,7 @@ def dir_digest(root: Path, rel_paths: Iterable[str]) -> str:
     return digest.hexdigest()
 
 
-def _bundle_verified(root: Path, *, rel_paths: Iterable[str], pin: str) -> bool:
+def _is_bundle_intact(root: Path, *, rel_paths: Iterable[str], pin: str) -> bool:
     if not all((root / rel).is_file() for rel in rel_paths):
         return False
     return dir_digest(root, rel_paths) == pin
@@ -111,25 +104,22 @@ def _bundle_verified(root: Path, *, rel_paths: Iterable[str], pin: str) -> bool:
 
 def _ensure_bundle(name: BundleName) -> dict[str, Path]:
     """Verify one bundle; fetch any missing file; validate the whole dir digest."""
-    cache_root = asset_cache_root()
     rel_paths = BUNDLE_FILES[name]
     pin = BUNDLE_SHA256S[name]
-    paths = {rel: cache_root / rel for rel in rel_paths}
-    if _bundle_verified(cache_root, rel_paths=rel_paths, pin=pin):
+    paths = {rel: ASSET_CACHE_ROOT / rel for rel in rel_paths}
+    if _is_bundle_intact(ASSET_CACHE_ROOT, rel_paths=rel_paths, pin=pin):
         return paths
     for rel in rel_paths:
-        cached = cache_root / rel
+        cached = ASSET_CACHE_ROOT / rel
         if not cached.is_file():
             _download(_hf_url(VENDORED_REPO, revision=VENDORED_REVISION, repo_path=rel), cached)
-    if not _bundle_verified(cache_root, rel_paths=rel_paths, pin=pin):
-        raise RuntimeError(
-            f"{name} asset bundle failed its directory digest; delete {asset_cache_root()} to re-download"
-        )
+    if not _is_bundle_intact(ASSET_CACHE_ROOT, rel_paths=rel_paths, pin=pin):
+        raise RuntimeError(f"{name} asset bundle failed its directory digest; delete {ASSET_CACHE_ROOT} to re-download")
     return paths
 
 
 def ensure_bundles() -> dict[str, Path]:
-    """Verify both bundles; fetch any missing file; return one cache path per file."""
+    """Verify all bundles; fetch any missing file; return one cache path per file."""
     paths: dict[str, Path] = {}
     for name in BUNDLE_FILES:
         paths.update(_ensure_bundle(name))
@@ -139,7 +129,7 @@ def ensure_bundles() -> dict[str, Path]:
 @contextmanager
 def decompress_mert_weights(snapshot: Path) -> Generator[Path]:
     target = snapshot / "model.safetensors"
-    # A staged leftover from a crashed run is never authoritative.
+    # Possible leftovers
     target.unlink(missing_ok=True)
     tmp_path = target.with_name(f"{target.name}.tmp")
     try:

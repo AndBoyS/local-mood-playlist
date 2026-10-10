@@ -1,85 +1,86 @@
 """CLI shell for fixed-vocabulary mood playlists."""
 
 import sys
-from enum import StrEnum
 from pathlib import Path
 from time import monotonic
+from typing import NamedTuple
 
 import questionary
 import typed_argparse as tap
 
 from local_mood_playlist.indexing import ProgressUpdate, default_cache_path, index_library
+from local_mood_playlist.moods import MoodName
 from local_mood_playlist.music2emotion import MODEL_VERSION
 from local_mood_playlist.playlists import rank_cached_tracks, render_m3u8
 from local_mood_playlist.predictions import PredictionCache
 
 
-class Mood(StrEnum):
-    CALM = "calm"
-    DARK = "dark"
-    DREAMY = "dreamy"
-    EMOTIONAL = "emotional"
-    ENERGETIC = "energetic"
-    HAPPY = "happy"
-    HOPEFUL = "hopeful"
-    MELANCHOLIC = "melancholic"
-    MEDITATIVE = "meditative"
-    POSITIVE = "positive"
-    RELAXING = "relaxing"
-    ROMANTIC = "romantic"
-    SAD = "sad"
-    SEXY = "sexy"
-    UPLIFTING = "uplifting"
-    COOL = "cool"
-    DEEP = "deep"
-    EPIC = "epic"
-    FUN = "fun"
-    FUNNY = "funny"
-    GROOVY = "groovy"
-    HEAVY = "heavy"
-    INSPIRING = "inspiring"
-    LOVE = "love"
-    MOTIVATIONAL = "motivational"
-    PARTY = "party"
-    POWERFUL = "powerful"
-    SOFT = "soft"
-    UPBEAT = "upbeat"
+class MoodEntry(NamedTuple):
+    mood: MoodName
+    color: str
+    # Is in cli by default?
+    is_core: bool
 
 
-MOOD_CANONICAL_TAG: dict[Mood, str] = {mood: f"mood/theme---{mood.value}" for mood in Mood}
-MOOD_CANONICAL_TAG[Mood.DREAMY] = "mood/theme---dream"
+MOOD_ENTRIES: list[MoodEntry] = [
+    MoodEntry(mood="calm", color="#8db9d8", is_core=True),
+    MoodEntry(mood="relaxing", color="#8db9d8", is_core=True),
+    MoodEntry(mood="meditative", color="#8db9d8", is_core=True),
+    MoodEntry(mood="soft", color="#8db9d8", is_core=True),
+    MoodEntry(mood="dreamy", color="#8db9d8", is_core=True),
+    MoodEntry(mood="ballad", color="#8db9d8", is_core=True),
+    MoodEntry(mood="melodic", color="#8db9d8", is_core=True),
+    MoodEntry(mood="slow", color="#8db9d8", is_core=True),
+    MoodEntry(mood="soundscape", color="#8db9d8", is_core=True),
+    MoodEntry(mood="space", color="#8db9d8", is_core=True),
+    MoodEntry(mood="deep", color="#7893ab", is_core=True),
+    MoodEntry(mood="emotional", color="#7893ab", is_core=True),
+    MoodEntry(mood="melancholic", color="#7893ab", is_core=True),
+    MoodEntry(mood="sad", color="#7893ab", is_core=True),
+    MoodEntry(mood="dark", color="#7893ab", is_core=True),
+    MoodEntry(mood="dramatic", color="#7893ab", is_core=True),
+    MoodEntry(mood="happy", color="#d8c26a", is_core=True),
+    MoodEntry(mood="positive", color="#d8c26a", is_core=True),
+    MoodEntry(mood="hopeful", color="#d8c26a", is_core=True),
+    MoodEntry(mood="fun", color="#d8c26a", is_core=True),
+    MoodEntry(mood="funny", color="#d8c26a", is_core=True),
+    MoodEntry(mood="cool", color="#d8c26a", is_core=True),
+    MoodEntry(mood="inspiring", color="#d8c26a", is_core=True),
+    MoodEntry(mood="uplifting", color="#d8c26a", is_core=True),
+    MoodEntry(mood="motivational", color="#d8c26a", is_core=True),
+    MoodEntry(mood="energetic", color="#d99a6c", is_core=True),
+    MoodEntry(mood="upbeat", color="#d99a6c", is_core=True),
+    MoodEntry(mood="groovy", color="#d99a6c", is_core=True),
+    MoodEntry(mood="party", color="#d99a6c", is_core=True),
+    MoodEntry(mood="fast", color="#d99a6c", is_core=True),
+    MoodEntry(mood="action", color="#d99a6c", is_core=True),
+    MoodEntry(mood="powerful", color="#cf8585", is_core=True),
+    MoodEntry(mood="heavy", color="#cf8585", is_core=True),
+    MoodEntry(mood="epic", color="#cf8585", is_core=True),
+    MoodEntry(mood="nature", color="#9fc48f", is_core=True),
+    MoodEntry(mood="summer", color="#9fc48f", is_core=True),
+    MoodEntry(mood="travel", color="#9fc48f", is_core=True),
+    MoodEntry(mood="adventure", color="#9fc48f", is_core=True),
+    MoodEntry(mood="retro", color="#93a0ac", is_core=True),
+    MoodEntry(mood="background", color="#9d8fd9", is_core=True),
+    MoodEntry(mood="romantic", color="#d6a0c2", is_core=True),
+    MoodEntry(mood="sexy", color="#d6a0c2", is_core=True),
+    MoodEntry(mood="love", color="#d6a0c2", is_core=True),
+    MoodEntry(mood="children", color="#d8c26a", is_core=False),
+    MoodEntry(mood="christmas", color="#d8c26a", is_core=False),
+    MoodEntry(mood="holiday", color="#d8c26a", is_core=False),
+    MoodEntry(mood="sport", color="#d99a6c", is_core=False),
+    MoodEntry(mood="drama", color="#7893ab", is_core=False),
+    MoodEntry(mood="documentary", color="#7893ab", is_core=False),
+    MoodEntry(mood="movie", color="#9d8fd9", is_core=False),
+    MoodEntry(mood="film", color="#9d8fd9", is_core=False),
+    MoodEntry(mood="game", color="#9d8fd9", is_core=False),
+    MoodEntry(mood="advertising", color="#9d8fd9", is_core=False),
+    MoodEntry(mood="commercial", color="#9d8fd9", is_core=False),
+    MoodEntry(mood="corporate", color="#9d8fd9", is_core=False),
+    MoodEntry(mood="trailer", color="#9d8fd9", is_core=False),
+]
 
-MOOD_DISPLAY: dict[Mood, str] = {
-    Mood.CALM: "#8db9d8",
-    Mood.RELAXING: "#8db9d8",
-    Mood.MEDITATIVE: "#8db9d8",
-    Mood.SOFT: "#8db9d8",
-    Mood.DREAMY: "#8db9d8",
-    Mood.DEEP: "#7893ab",
-    Mood.EMOTIONAL: "#7893ab",
-    Mood.MELANCHOLIC: "#7893ab",
-    Mood.SAD: "#7893ab",
-    Mood.DARK: "#7893ab",
-    Mood.HAPPY: "#d8c26a",
-    Mood.POSITIVE: "#d8c26a",
-    Mood.HOPEFUL: "#d8c26a",
-    Mood.FUN: "#d8c26a",
-    Mood.FUNNY: "#d8c26a",
-    Mood.COOL: "#d8c26a",
-    Mood.INSPIRING: "#d8c26a",
-    Mood.UPLIFTING: "#d8c26a",
-    Mood.MOTIVATIONAL: "#d8c26a",
-    Mood.ENERGETIC: "#d99a6c",
-    Mood.UPBEAT: "#d99a6c",
-    Mood.GROOVY: "#d99a6c",
-    Mood.PARTY: "#d99a6c",
-    Mood.POWERFUL: "#cf8585",
-    Mood.HEAVY: "#cf8585",
-    Mood.EPIC: "#cf8585",
-    Mood.ROMANTIC: "#d6a0c2",
-    Mood.SEXY: "#d6a0c2",
-    Mood.LOVE: "#d6a0c2",
-}
 _MAX_FAILURES_TO_PRINT = 20
 
 PICKER_STYLE = questionary.Style(
@@ -94,9 +95,12 @@ PICKER_STYLE = questionary.Style(
 
 
 class CreateArgs(tap.TypedArgs):
-    moods: list[Mood] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
+    moods: list[MoodName] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
+    all: bool = tap.arg("-a", "--all", default=False, help="Offer extended model-only mood tags in the dialog")
     count: int | None = tap.arg("-n", default=None, help="Playlist size (default: all ranked tracks)")
-    threshold: float = tap.arg("-t", "--threshold", default=0.5, help="Minimum mean mood probability (0-1]; default: 0.5")
+    threshold: float = tap.arg(
+        "-t", "--threshold", default=0.5, help="Minimum mean mood probability (0-1]; default: 0.5"
+    )
     output: str | None = tap.arg(
         "-o", default=None, help="Playlist destination (.m3u8); use {moods} for the selected moods"
     )
@@ -112,8 +116,14 @@ class IndexArgs(tap.TypedArgs):
 
 
 def moods_list_cmd(_: tap.TypedArgs) -> None:
-    for label in MOOD_DISPLAY:
-        print(f"  {label}")
+    for entry in MOOD_ENTRIES:
+        if entry.is_core:
+            print(f"  {entry.mood}")
+    print()
+    print("  Extended model tags (offerable in the dialog via `moodpl create -a`):")
+    for entry in MOOD_ENTRIES:
+        if not entry.is_core:
+            print(f"  {entry.mood}")
 
 
 def index_cmd(args: IndexArgs) -> None:
@@ -168,17 +178,15 @@ def index_cmd(args: IndexArgs) -> None:
     print(f"  Cache: {summary.cache_path}")
 
 
-def run_mood_picker() -> list[Mood] | None:
+def run_mood_picker(show_all: bool = False) -> list[MoodName] | None:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         print("moodpl create: pass mood labels when running non-interactively", file=sys.stderr)
         raise SystemExit(2)
 
-    choices = [
-        questionary.Choice(title=[(f"fg:{color}", label.value)], value=label.value)
-        for label, color in MOOD_DISPLAY.items()
-    ]
+    shown = MOOD_ENTRIES if show_all else [entry for entry in MOOD_ENTRIES if entry.is_core]
+    choices = [questionary.Choice(title=[(f"fg:{entry.color}", entry.mood)], value=entry.mood) for entry in shown]
     try:
-        selected = questionary.checkbox(
+        selected: list[MoodName] | None = questionary.checkbox(
             "Choose moods to blend",
             choices=choices,
             instruction="(Use arrows/jk to move, Space to toggle, Enter to confirm)",
@@ -191,7 +199,7 @@ def run_mood_picker() -> list[Mood] | None:
     if selected is None:
         return None
 
-    return [Mood(label) for label in selected]
+    return selected
 
 
 def _validate_playlist_output_path(output_path: Path, cache_path: Path | None) -> None:
@@ -211,7 +219,7 @@ def create_cmd(args: CreateArgs) -> None:
 
     moods = args.moods
     if len(moods) == 0:
-        moods = run_mood_picker()
+        moods = run_mood_picker(show_all=args.all)
         if moods is None or len(moods) == 0:
             print("No moods selected; cancelled.")
             return
@@ -221,7 +229,7 @@ def create_cmd(args: CreateArgs) -> None:
 
     output_arg = args.output
     if output_arg is not None and "{moods}" in output_arg:
-        output_arg = output_arg.replace("{moods}", "-".join(mood.value for mood in moods))
+        output_arg = output_arg.replace("{moods}", "-".join(moods))
 
     if args.cache is not None:
         cache_path = Path(args.cache).expanduser()
@@ -236,7 +244,7 @@ def create_cmd(args: CreateArgs) -> None:
 
     if args.dry_run and cache_path is None:
         print("Playlist request preview (not ranked; no cache selected)")
-        print(f"  Moods: {', '.join(mood.value for mood in moods)}")
+        print(f"  Moods: {', '.join(moods)}")
         print("  Matching: mean of selected mood probabilities")
         print(f"  Threshold: mean mood probability >= {args.threshold:g}")
         if args.count is None:
@@ -250,19 +258,14 @@ def create_cmd(args: CreateArgs) -> None:
     assert cache_path is not None
     try:
         cache = PredictionCache(cache_path, model_version=MODEL_VERSION)
-        ranked = rank_cached_tracks(
-            cache,
-            tuple(MOOD_CANONICAL_TAG[mood] for mood in moods),
-            limit=args.count,
-            min_score=args.threshold,
-        )
+        ranked = rank_cached_tracks(cache, moods=moods, limit=args.count, min_score=args.threshold)
         output_path = Path(output_arg).expanduser() if output_arg is not None else None
         if output_path is not None:
             _validate_playlist_output_path(output_path, cache.path)
 
         if args.dry_run:
             print("Playlist preview (not written)")
-            print(f"  Moods: {', '.join(mood.value for mood in moods)}")
+            print(f"  Moods: {', '.join(moods)}")
             requested = "all" if args.count is None else str(args.count)
             print(f"  Ranked tracks: {len(ranked)} of {requested} requested")
             print(f"  Threshold: mean mood probability >= {args.threshold:g}")

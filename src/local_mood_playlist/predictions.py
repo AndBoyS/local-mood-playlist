@@ -9,7 +9,9 @@ import urllib.parse
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO
+from typing import TextIO, cast
+
+from local_mood_playlist.moods import MOOD_NAMES, MoodName
 
 _CACHE_SCHEMA_VERSION = 1
 _META_PREFIX = "#moodpl-predictions"
@@ -25,11 +27,12 @@ _MAX_VA_SCORE = 9.0
 class TrackPrediction:
     """Emotion model output for one track.
 
-    Mood scores should use canonical model tag names and probabilities in [0, 1].
+    Mood scores should use plain mood names (Mood vocabulary values) and
+    probabilities in [0, 1].
     Valence and arousal use Music2Emotion's documented 1-9 scale.
     """
 
-    mood_scores: dict[str, float]
+    mood_scores: dict[MoodName, float]
     valence: float
     arousal: float
 
@@ -37,8 +40,8 @@ class TrackPrediction:
         if len(self.mood_scores) == 0:
             raise ValueError("mood_scores must not be empty")
         for tag, score in self.mood_scores.items():
-            if len(tag) == 0 or not math.isfinite(score) or not 0.0 <= score <= 1.0:
-                raise ValueError("mood scores must have non-empty tags and finite values in [0, 1]")
+            if tag not in MOOD_NAMES or not math.isfinite(score) or not 0.0 <= score <= 1.0:
+                raise ValueError("mood scores must use known mood names and finite values in [0, 1]")
         for name, value in (("valence", self.valence), ("arousal", self.arousal)):
             if not math.isfinite(value) or not _MIN_VA_SCORE <= value <= _MAX_VA_SCORE:
                 raise ValueError(f"{name} must be finite and in [{_MIN_VA_SCORE:g}, {_MAX_VA_SCORE:g}]")
@@ -80,7 +83,7 @@ class PredictionCache:
 
     def iter_predictions(self) -> Iterator[tuple[Path, TrackPrediction]]:
         """Yield fresh cached predictions with canonical audio paths."""
-        for raw_path in tuple(self._entries):
+        for raw_path in self._entries:
             audio_path = Path(raw_path)
             prediction = self.get(audio_path)
             if prediction is not None:
@@ -186,6 +189,12 @@ class PredictionCache:
         if tuple(header[: len(_HEADER_PREFIX)]) != _HEADER_PREFIX:
             return {}
         tags = tuple(header[len(_HEADER_PREFIX) :])
+        unknown_tags = [tag for tag in tags if tag not in MOOD_NAMES]
+        if len(unknown_tags) > 0:
+            raise ValueError(
+                f"prediction cache {self.path} contains unknown mood tag column(s) "
+                f"{', '.join(unknown_tags)}; delete it and re-index the library"
+            )
 
         entries: dict[str, _CacheEntry] = {}
         for row in reader:
@@ -219,7 +228,7 @@ def _decode_row(row: list[str], tags: tuple[str, ...]) -> _CacheEntry | None:
         except ValueError:
             return None
     try:
-        prediction = TrackPrediction(scores, valence, arousal)
+        prediction = TrackPrediction(cast("dict[MoodName, float]", scores), valence, arousal)
     except ValueError:
         return None
     return _CacheEntry(size_bytes, modified_ns, prediction)
