@@ -9,7 +9,7 @@ import urllib.parse
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO, TypeGuard
+from typing import TextIO
 
 _CACHE_SCHEMA_VERSION = 1
 _META_PREFIX = "#moodpl-predictions"
@@ -37,14 +37,10 @@ class TrackPrediction:
         if len(self.mood_scores) == 0:
             raise ValueError("mood_scores must not be empty")
         for tag, score in self.mood_scores.items():
-            if len(tag) == 0 or not _is_number(score) or not math.isfinite(score) or not 0.0 <= score <= 1.0:
+            if len(tag) == 0 or not math.isfinite(score) or not 0.0 <= score <= 1.0:
                 raise ValueError("mood scores must have non-empty tags and finite values in [0, 1]")
         for name, value in (("valence", self.valence), ("arousal", self.arousal)):
-            if (
-                not _is_number(value)
-                or not math.isfinite(value)
-                or not _MIN_VA_SCORE <= value <= _MAX_VA_SCORE
-            ):
+            if not math.isfinite(value) or not _MIN_VA_SCORE <= value <= _MAX_VA_SCORE:
                 raise ValueError(f"{name} must be finite and in [{_MIN_VA_SCORE:g}, {_MAX_VA_SCORE:g}]")
 
 
@@ -233,7 +229,3 @@ def _parse_nonnegative_int(value: str) -> int | None:
     if len(value) == 0 or not (value.isascii() and value.isdigit()):
         return None
     return int(value)
-
-
-def _is_number(value: object) -> TypeGuard[int | float]:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
