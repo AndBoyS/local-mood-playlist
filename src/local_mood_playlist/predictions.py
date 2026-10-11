@@ -19,8 +19,6 @@ _SCHEMA_FIELD = f"schema={_CACHE_SCHEMA_VERSION}"
 _MODEL_VERSION_FIELD = "model_version="
 _META_COLUMN_COUNT = 3
 _HEADER_PREFIX = ("path", "size_bytes", "modified_ns", "valence", "arousal")
-_MIN_VA_SCORE = 1.0
-_MAX_VA_SCORE = 9.0
 
 
 @dataclass(frozen=True)
@@ -29,7 +27,9 @@ class TrackPrediction:
 
     Mood scores should use plain mood names (Mood vocabulary values) and
     probabilities in [0, 1].
-    Valence and arousal use Music2Emotion's documented 1-9 scale.
+    Valence and arousal are informational model outputs on Music2Emotion's
+    1-9 scale; they are stored but never used for ranking, so they are not
+    range-validated. Nothing in this repository consumes them yet.
     """
 
     mood_scores: dict[MoodName, float]
@@ -42,9 +42,6 @@ class TrackPrediction:
         for tag, score in self.mood_scores.items():
             if tag not in MOOD_NAMES or not math.isfinite(score) or not 0.0 <= score <= 1.0:
                 raise ValueError("mood scores must use known mood names and finite values in [0, 1]")
-        for name, value in (("valence", self.valence), ("arousal", self.arousal)):
-            if not math.isfinite(value) or not _MIN_VA_SCORE <= value <= _MAX_VA_SCORE:
-                raise ValueError(f"{name} must be finite and in [{_MIN_VA_SCORE:g}, {_MAX_VA_SCORE:g}]")
 
 
 @dataclass(frozen=True)
