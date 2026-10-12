@@ -29,6 +29,7 @@ from typing import Literal
 import zstandard as zstd
 
 from local_mood_playlist.const import CACHE_DIR
+from local_mood_playlist.filesystem_utils import open_atomic
 
 BundleName = Literal["music2emo", "mert"]
 
@@ -64,19 +65,12 @@ def _hf_url(repo: str, *, revision: str, repo_path: str) -> str:
 
 
 def _download(url: str, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = dest.with_suffix(".download-tmp")
-    try:
-        with urllib.request.urlopen(url) as response, tmp_path.open("wb") as out:
-            while True:
-                chunk: bytes = response.read(1 << 20)
-                if chunk == b"":
-                    break
-                _ = out.write(chunk)
-        _ = tmp_path.replace(dest)
-    except BaseException:
-        tmp_path.unlink(missing_ok=True)
-        raise
+    with open_atomic(dest) as out, urllib.request.urlopen(url) as response:
+        while True:
+            chunk: bytes = response.read(1 << 20)
+            if chunk == b"":
+                break
+            _ = out.write(chunk)
 
 
 def dir_digest(root: Path, rel_paths: Iterable[str]) -> str:
@@ -128,19 +122,13 @@ def ensure_bundles() -> dict[str, Path]:
 
 @contextmanager
 def decompress_mert_weights(snapshot: Path) -> Generator[Path]:
-    target = snapshot / "model.safetensors"
-    # Possible leftovers
-    target.unlink(missing_ok=True)
-    tmp_path = target.with_name(f"{target.name}.tmp")
-    try:
-        with (
-            (snapshot / "model.safetensors.zst").open("rb") as source,
-            tmp_path.open("wb") as out,
-            zstd.ZstdDecompressor().stream_reader(source) as reader,
-        ):
-            shutil.copyfileobj(reader, out, 1 << 20)
-        _ = tmp_path.replace(target)
-    finally:
-        tmp_path.unlink(missing_ok=True)
+    target_path = snapshot / "model.safetensors"
+    source_path = snapshot / "model.safetensors.zst"
+    with (
+        open_atomic(target_path) as target,
+        source_path.open("rb") as source,
+        zstd.ZstdDecompressor().stream_reader(source) as reader,
+    ):
+        shutil.copyfileobj(reader, target, 1 << 20)
     yield snapshot
-    target.unlink(missing_ok=True)
+    target_path.unlink(missing_ok=True)

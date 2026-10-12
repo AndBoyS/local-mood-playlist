@@ -1,14 +1,13 @@
 """Prediction records and persistent cache for local audio inference."""
 
 import math
-import os
 import pickle
-import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
 
+from local_mood_playlist.filesystem_utils import open_atomic
 from local_mood_playlist.moods import MOOD_NAMES, MoodName
 
 _CACHE_SCHEMA_VERSION = 1
@@ -92,30 +91,14 @@ class PredictionCache:
 
     def save(self) -> None:
         """Atomically write cache; batch put() calls before saving to avoid repeated I/O."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         payload: _CachePayload = {
             "schema_version": _CACHE_SCHEMA_VERSION,
             "model_version": self.model_version,
             "entries": self._entries,
         }
 
-        temp_path: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb",
-                dir=self.path.parent,
-                prefix=f".{self.path.name}.",
-                suffix=".tmp",
-                delete=False,
-            ) as f:
-                temp_path = Path(f.name)
-                pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
-                f.flush()
-                os.fsync(f.fileno())
-            _ = temp_path.replace(self.path)
-        finally:
-            if temp_path is not None:
-                temp_path.unlink(missing_ok=True)
+        with open_atomic(self.path) as file:
+            pickle.dump(payload, file, protocol=pickle.HIGHEST_PROTOCOL)
 
     def _fingerprint(self, audio_path: Path) -> tuple[Path, int, int] | None:
         try:
