@@ -38,7 +38,7 @@ def default_cache_path(library_path: Path) -> Path:
     """Return workspace-cache path unique to this resolved library directory."""
     resolved_library = library_path.expanduser().resolve(strict=True)
     library_id = hashlib.sha256(str(resolved_library).encode("utf-8")).hexdigest()[:20]
-    return CACHE_DIR / "predictions" / f"predictions-{library_id}.tsv"
+    return CACHE_DIR / "predictions" / f"predictions-{library_id}.pkl"
 
 
 def index_library(

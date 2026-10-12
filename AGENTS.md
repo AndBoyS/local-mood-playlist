@@ -30,3 +30,4 @@
   data; use `Any` only for inherently dynamic APIs.
 - Don't do mock tests
 - Use git naming conventions
+- We don't do env vars as configs
