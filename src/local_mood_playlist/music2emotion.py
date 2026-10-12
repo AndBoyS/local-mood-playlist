@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from local_mood_playlist.assets import MERT_CACHE_DIR, decompress_mert_weights, ensure_bundles
+from local_mood_playlist.assets import decompress_mert_weights, ensure_bundles, mert_cache_dir
 from local_mood_playlist.moods import MOOD_NAMES, MoodName
 from local_mood_playlist.predictions import TrackPrediction
 
@@ -29,12 +29,12 @@ def to_cli_moods(canonical_tag: str) -> MoodName:
     return name
 
 
-def _load_model() -> Music2emo:
-    bundles = ensure_bundles()
+def _load_model(cache_root: Path) -> Music2emo:
+    bundles = ensure_bundles(cache_root)
 
     from local_mood_playlist.vendor.music2emo import Music2emo  # noqa: PLC0415
 
-    with decompress_mert_weights(MERT_CACHE_DIR) as snapshot:
+    with decompress_mert_weights(mert_cache_dir(cache_root)) as snapshot:
         return Music2emo(
             model_weights=bundles["music2emo/J_all.safetensors"],
             chord_model_weights=bundles["music2emo/btc_model_large_voca.safetensors"],
@@ -45,10 +45,12 @@ def _load_model() -> Music2emo:
 class Music2Emotion:
     """Music2Emotion model wrapper."""
 
-    def __init__(self) -> None:
-        self._model = _load_model()
+    def __init__(self, cache_root: Path) -> None:
+        self._model = _load_model(cache_root)
 
     def predict(self, audio_path: Path) -> TrackPrediction:
         result = self._model.predict(audio_path.expanduser().resolve(strict=True), threshold=0.5)
-        mood_scores = {to_cli_moods(tag): score for tag, score in result["mood_scores"].items()}
-        return TrackPrediction(mood_scores, result["valence"], result["arousal"])
+        mood_scores = {to_cli_moods(tag): float(score) for tag, score in result["mood_scores"].items()}
+        return TrackPrediction.from_raw(
+            {"mood_scores": mood_scores, "valence": result["valence"], "arousal": result["arousal"]}
+        )

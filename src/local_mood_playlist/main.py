@@ -3,12 +3,18 @@
 import sys
 from pathlib import Path
 from time import monotonic
-from typing import NamedTuple
+from typing import NamedTuple, NoReturn
 
 import questionary
 import typed_argparse as tap
 
-from local_mood_playlist.indexing import ProgressUpdate, default_cache_path, index_library
+from local_mood_playlist.args import CreateArgs, IndexArgs, SetupArgs
+from local_mood_playlist.config import RawConfig, ResolvedConfig, config_path, dump_raw_config
+from local_mood_playlist.indexing import (
+    AUDIO_SUFFIXES,
+    ProgressUpdate,
+    index_library,
+)
 from local_mood_playlist.moods import MoodName
 from local_mood_playlist.music2emotion import MODEL_VERSION
 from local_mood_playlist.playlists import rank_cached_tracks, render_m3u8
@@ -94,25 +100,34 @@ PICKER_STYLE = questionary.Style(
 )
 
 
-class CreateArgs(tap.TypedArgs):
-    moods: list[MoodName] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
-    all: bool = tap.arg("-a", "--all", default=False, help="Offer extended model-only mood tags in the dialog")
-    count: int | None = tap.arg("-n", default=None, help="Playlist size (default: all ranked tracks)")
-    threshold: float = tap.arg(
-        "-t", "--threshold", default=0.5, help="Minimum mean mood probability (0-1]; default: 0.5"
-    )
-    output: str | None = tap.arg(
-        "-o", default=None, help="Playlist destination (.m3u8); use {moods} for the selected moods"
-    )
-    library: str | None = tap.arg(default=None, help="Library root for the default prediction cache")
-    cache: str | None = tap.arg(default=None, help="Prediction cache file path (overrides --library)")
-    dry_run: bool = tap.arg(default=False, help="Preview ranked tracks when cache exists; never write a playlist")
+def _fail(cmd: str, msg: str) -> NoReturn:
+    print(f"moodpl {cmd}: {msg}", file=sys.stderr)
+    raise SystemExit(2)
 
 
-class IndexArgs(tap.TypedArgs):
-    library: str = tap.arg(positional=True, help="Music library directory to analyze")
-    cache: str | None = tap.arg(default=None, help="Prediction cache file path")
-    force: bool = tap.arg(default=False, help="Recompute predictions for every supported audio file")
+def _confirm(question: str) -> bool:
+    answer: bool | None = questionary.confirm(question, style=PICKER_STYLE).ask()
+    if answer is None:
+        print("Cancelled.")
+        raise SystemExit(0)
+    return answer
+
+
+def _prompt_path(question: str, *, default: str | None = None, only_directories: bool = True) -> str | None:
+    prompt_default = default if default is not None else ""
+    try:
+        answer: str | None = questionary.path(
+            question, default=prompt_default, only_directories=only_directories, style=PICKER_STYLE
+        ).ask()
+    except (KeyboardInterrupt, EOFError):
+        return None
+    return answer
+
+
+def require_library_dir(cfg: ResolvedConfig, *, command: str) -> Path:
+    if cfg.library_dir is None:
+        _fail(command, "no library directory: pass one or run `moodpl setup`")
+    return cfg.library_dir
 
 
 def moods_list_cmd(_: tap.TypedArgs) -> None:
@@ -153,9 +168,15 @@ def index_cmd(args: IndexArgs) -> None:
             print(progress_line, file=sys.stderr, flush=True)
 
     try:
+        cfg = ResolvedConfig.from_raw_and_cli(RawConfig.from_user_config(), args)
+        library = require_library_dir(cfg, command="index")
+        cache_path = cfg.pred_cache_path
+        if cache_path is None:
+            _fail("index", "configured library has no prediction cache path")
         summary = index_library(
-            Path(args.library),
-            cache_path=Path(args.cache) if args.cache is not None else None,
+            library,
+            cache_path=cache_path,
+            cache_root=cfg.cache_dir,
             force=args.force,
             on_progress=report_progress,
         )
@@ -176,6 +197,75 @@ def index_cmd(args: IndexArgs) -> None:
         remaining_failures = summary.predictions_failed - _MAX_FAILURES_TO_PRINT
         print(f"  ... and {remaining_failures} more failures", file=sys.stderr)
     print(f"  Cache: {summary.cache_path}")
+
+
+def _prompt_library_dir(cmd: str, *, fallback: Path | None = None) -> Path:
+    """Prompt for a library directory until it exists; empty answer re-prompts, None cancels."""
+    while True:
+        answer = _prompt_path("Music library directory", default=str(fallback) if fallback is not None else None)
+        if answer is None or len(answer.strip()) == 0:
+            if answer is not None:
+                print(f"moodpl {cmd}: empty directory", file=sys.stderr)
+                continue
+            print("Cancelled.")
+            raise SystemExit(0)
+        candidate = Path(answer).expanduser()
+        if candidate.is_dir():
+            return candidate
+        print(f"moodpl {cmd}: directory does not exist: {candidate}", file=sys.stderr)
+
+
+def _setup_library_dir(cfg: ResolvedConfig, *, non_interactive: bool) -> Path:
+    """Return the library directory for setup; interactive setup may prompt, non-interactive must fail."""
+    library = cfg.library_dir
+    if library is not None and library.is_dir():
+        return library
+    if not non_interactive:
+        return _prompt_library_dir("setup", fallback=library)
+    if library is None:
+        _fail("setup", "no library directory: pass --library (terminal not detected)")
+    _fail("setup", f"directory does not exist: {library}")
+
+
+def setup_cmd(args: SetupArgs) -> None:
+    non_interactive = not (sys.stdin.isatty() and sys.stdout.isatty())
+    try:
+        raw = RawConfig.from_user_config()
+        pre_interactive_cfg = ResolvedConfig.from_raw_and_cli(raw, args)
+        library = _setup_library_dir(pre_interactive_cfg, non_interactive=non_interactive)
+
+        prompt_cache_dir: str | None = None
+        if args.cache_dir is None and not non_interactive:
+            answer = _prompt_path("Cache directory", default=str(pre_interactive_cfg.cache_dir))
+            prompt_cache_dir = answer if answer is not None and len(answer.strip()) > 0 else None
+
+        audio_count = sum(path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES for path in library.rglob("*"))
+        if audio_count == 0:
+            print(f"warning: no supported audio files found yet under {library}", file=sys.stderr)
+
+        cfg_path = config_path()
+        if cfg_path.is_file():
+            if non_interactive:
+                _fail(
+                    "setup",
+                    f"refusing to overwrite {cfg_path} without a terminal; delete it first or run interactively",
+                )
+            if not _confirm(f"Overwrite {cfg_path}?"):
+                return
+
+        final_args = SetupArgs(
+            library=str(library), cache_dir=prompt_cache_dir if prompt_cache_dir is not None else args.cache_dir
+        )
+        cfg = ResolvedConfig.from_raw_and_cli(raw, final_args)
+        payload = dump_raw_config(cfg, cfg_path)
+    except (OSError, TypeError, ValueError) as error:
+        print(f"moodpl setup: {error}", file=sys.stderr)
+        raise SystemExit(2) from error
+
+    print(f"Config written: {cfg_path}")
+    for name, value in payload.items():
+        print(f"  {name} = {value}")
+    print("Next: moodpl index")
 
 
 def run_mood_picker(show_all: bool = False) -> list[MoodName] | None:
@@ -200,6 +290,18 @@ def run_mood_picker(show_all: bool = False) -> list[MoodName] | None:
         return None
 
     return selected
+
+
+def _print_request_preview(
+    moods: list[MoodName], *, threshold: float, count: int | None, output_arg: str | None
+) -> None:
+    print("Playlist request preview (not ranked; no usable prediction cache)")
+    print(f"  Moods: {', '.join(moods)}")
+    print("  Matching: mean of selected mood probabilities")
+    print(f"  Threshold: mean mood probability >= {threshold:g}")
+    print("  Tracks requested: all ranked tracks" if count is None else f"  Tracks requested: {count}")
+    if output_arg is not None:
+        print(f"  Would write: {output_arg}")
 
 
 def _validate_playlist_output_path(output_path: Path, cache_path: Path | None) -> None:
@@ -231,31 +333,21 @@ def create_cmd(args: CreateArgs) -> None:
     if output_arg is not None and "{moods}" in output_arg:
         output_arg = output_arg.replace("{moods}", "-".join(moods))
 
-    if args.cache is not None:
-        cache_path = Path(args.cache).expanduser()
-    elif args.library is not None:
-        cache_path = default_cache_path(Path(args.library))
-    else:
-        cache_path = None
+    try:
+        cache_path = ResolvedConfig.from_raw_and_cli(RawConfig.from_user_config(), args).pred_cache_path
+    except OSError as error:
+        _fail("create", f"cannot locate library directory: {error}")
 
     if cache_path is None and not args.dry_run:
-        print("moodpl create: pass --cache or --library to use indexed predictions", file=sys.stderr)
-        raise SystemExit(2)
+        _fail("create", "pass --cache or --library (or run `moodpl setup`) to use indexed predictions")
 
-    if args.dry_run and cache_path is None:
-        print("Playlist request preview (not ranked; no cache selected)")
-        print(f"  Moods: {', '.join(moods)}")
-        print("  Matching: mean of selected mood probabilities")
-        print(f"  Threshold: mean mood probability >= {args.threshold:g}")
-        if args.count is None:
-            print("  Tracks requested: all ranked tracks")
-        else:
-            print(f"  Tracks requested: {args.count}")
-        if output_arg is not None:
-            print(f"  Would write: {output_arg}")
+    if args.dry_run and (cache_path is None or not cache_path.is_file()):
+        _print_request_preview(moods, threshold=args.threshold, count=args.count, output_arg=output_arg)
         return
 
-    assert cache_path is not None
+    if cache_path is None:
+        _fail("create", "no prediction cache available")
+
     try:
         cache = PredictionCache(cache_path, model_version=MODEL_VERSION)
         ranked = rank_cached_tracks(cache, moods=moods, limit=args.count, min_score=args.threshold)
@@ -288,15 +380,20 @@ def create_cmd(args: CreateArgs) -> None:
 
 
 def main() -> None:
-    tap.Parser(
-        tap.SubParserGroup(
-            tap.SubParser("moods", tap.TypedArgs, help="List selectable mood labels"),
-            tap.SubParser("create", CreateArgs, help="Create a playlist from selected mood tags"),
-            tap.SubParser("index", IndexArgs, help="Analyze library tracks and cache mood predictions"),
-            description="Create local playlists from a fixed set of mood tags.",
-        ),
-        prog="moodpl",
-    ).bind(moods_list_cmd, create_cmd, index_cmd).run()
+    try:
+        tap.Parser(
+            tap.SubParserGroup(
+                tap.SubParser("moods", tap.TypedArgs, help="List selectable mood labels"),
+                tap.SubParser("create", CreateArgs, help="Create a playlist from selected mood tags"),
+                tap.SubParser("index", IndexArgs, help="Analyze library tracks and cache mood predictions"),
+                tap.SubParser("setup", SetupArgs, help="Configure the library directory (and optional cache dir)"),
+                description="Create local playlists from a fixed set of mood tags.",
+            ),
+            prog="moodpl",
+        ).bind(moods_list_cmd, create_cmd, index_cmd, setup_cmd).run()
+    except ValueError as error:
+        print(f"moodpl: {error}", file=sys.stderr)
+        raise SystemExit(2) from error
 
 
 if __name__ == "__main__":

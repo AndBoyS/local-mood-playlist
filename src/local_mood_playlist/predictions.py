@@ -1,39 +1,50 @@
-"""Prediction records and persistent cache for local audio inference."""
+"""Prediction records and persistent cache for local audio inference.
 
-import math
+:class:`TrackPrediction` is a msgspec ``Struct``: the type annotations are
+validated at the model-output boundary via :func:`TrackPrediction.from_raw`
+(mood keys must be known mood names, scores must be finite floats in [0, 1]),
+so consumers never re-check them.
+"""
+
+from __future__ import annotations
+
 import pickle
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
+from typing import Annotated, TypedDict
+
+import msgspec
 
 from local_mood_playlist.filesystem_utils import open_atomic
-from local_mood_playlist.moods import MOOD_NAMES, MoodName
+from local_mood_playlist.moods import MoodName
 
 _CACHE_SCHEMA_VERSION = 1
 
+MoodScore = Annotated[float, msgspec.Meta(ge=0.0, le=1.0)]
 
-@dataclass(frozen=True)
-class TrackPrediction:
+
+class TrackPrediction(msgspec.Struct, frozen=True):
     """Emotion model output for one track.
 
-    Mood scores should use plain mood names (Mood vocabulary values) and
-    probabilities in [0, 1].
-    Valence and arousal are informational model outputs on Music2Emotion's
-    1-9 scale; they are stored but never used for ranking, so they are not
-    range-validated. Nothing in this repository consumes them yet.
+    Mood scores use plain mood names (Mood vocabulary values) and probabilities
+    in [0, 1]; construct via :meth:`from_raw` to enforce this. Valence and
+    arousal are informational model outputs on Music2Emotion's 1-9 scale; they
+    are stored but never used for ranking, so they are not range-validated.
+    Nothing in this repository consumes them yet.
     """
 
-    mood_scores: dict[MoodName, float]
+    mood_scores: dict[MoodName, MoodScore]
     valence: float
     arousal: float
 
     def __post_init__(self) -> None:
         if len(self.mood_scores) == 0:
             raise ValueError("mood_scores must not be empty")
-        for tag, score in self.mood_scores.items():
-            if tag not in MOOD_NAMES or not math.isfinite(score) or not 0.0 <= score <= 1.0:
-                raise ValueError("mood scores must use known mood names and finite values in [0, 1]")
+
+    @classmethod
+    def from_raw(cls, raw: Mapping[str, object]) -> TrackPrediction:
+        return msgspec.convert(raw, cls)
 
 
 @dataclass(frozen=True)

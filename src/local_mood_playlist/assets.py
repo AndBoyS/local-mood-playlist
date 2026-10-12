@@ -1,9 +1,10 @@
 """Download and verify vendored Music2Emotion assets on first use.
 
 Each cache file is downloaded once from the pinned vendored Hugging Face revision
-(:data:`VENDORED_REPO` / :data:`VENDORED_REVISION`) and cached under the
-project `.cache/assets/<revision>/{music2emo,mert}` directory, mirroring the
-repo layout.
+(:data:`VENDORED_REPO` / :data:`VENDORED_REVISION`) and cached under
+``<cache root>/moodpl/assets/<revision>/{music2emo,mert}`` (the caller supplies
+the cache root, resolved from its :class:`~local_mood_playlist.config.ResolvedConfig`),
+mirroring the same ``{music2emo,mert}`` layout.
 The payload bytes are pre-transformed per upstream revision by
 ``scripts/publish_assets.py`` (Lightning checkpoints → safetensors, scalar
 metadata extraction, MERT trimmed to 7 layers + zstd, config patch) and
@@ -28,7 +29,6 @@ from typing import Literal
 
 import zstandard as zstd
 
-from local_mood_playlist.const import CACHE_DIR
 from local_mood_playlist.filesystem_utils import open_atomic
 
 BundleName = Literal["music2emo", "mert"]
@@ -56,8 +56,15 @@ BUNDLE_FILES: dict[BundleName, list[str]] = {
     ],
 }
 
-ASSET_CACHE_ROOT = CACHE_DIR / "assets" / VENDORED_REVISION
-MERT_CACHE_DIR = ASSET_CACHE_ROOT / "mert"
+
+def asset_cache_dir(cache_root: Path) -> Path:
+    """Asset bundle root for the pinned revision, under the given cache root."""
+    return cache_root / "assets" / VENDORED_REVISION
+
+
+def mert_cache_dir(cache_root: Path) -> Path:
+    """MERT bundle directory, under :func:`asset_cache_dir`."""
+    return asset_cache_dir(cache_root) / "mert"
 
 
 def _hf_url(repo: str, *, revision: str, repo_path: str) -> str:
@@ -96,27 +103,28 @@ def _is_bundle_intact(root: Path, *, rel_paths: Iterable[str], pin: str) -> bool
     return dir_digest(root, rel_paths) == pin
 
 
-def _ensure_bundle(name: BundleName) -> dict[str, Path]:
+def _ensure_bundle(name: BundleName, cache_root: Path) -> dict[str, Path]:
     """Verify one bundle; fetch any missing file; validate the whole dir digest."""
     rel_paths = BUNDLE_FILES[name]
     pin = BUNDLE_SHA256S[name]
-    paths = {rel: ASSET_CACHE_ROOT / rel for rel in rel_paths}
-    if _is_bundle_intact(ASSET_CACHE_ROOT, rel_paths=rel_paths, pin=pin):
+    root = asset_cache_dir(cache_root)
+    paths = {rel: root / rel for rel in rel_paths}
+    if _is_bundle_intact(root, rel_paths=rel_paths, pin=pin):
         return paths
     for rel in rel_paths:
-        cached = ASSET_CACHE_ROOT / rel
+        cached = root / rel
         if not cached.is_file():
             _download(_hf_url(VENDORED_REPO, revision=VENDORED_REVISION, repo_path=rel), cached)
-    if not _is_bundle_intact(ASSET_CACHE_ROOT, rel_paths=rel_paths, pin=pin):
-        raise RuntimeError(f"{name} asset bundle failed its directory digest; delete {ASSET_CACHE_ROOT} to re-download")
+    if not _is_bundle_intact(root, rel_paths=rel_paths, pin=pin):
+        raise RuntimeError(f"{name} asset bundle failed its directory digest; delete {root} to re-download")
     return paths
 
 
-def ensure_bundles() -> dict[str, Path]:
+def ensure_bundles(cache_root: Path) -> dict[str, Path]:
     """Verify all bundles; fetch any missing file; return one cache path per file."""
     paths: dict[str, Path] = {}
     for name in BUNDLE_FILES:
-        paths.update(_ensure_bundle(name))
+        paths.update(_ensure_bundle(name, cache_root))
     return paths
 
 

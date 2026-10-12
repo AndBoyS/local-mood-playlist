@@ -31,3 +31,4 @@
 - Don't do mock tests
 - Use git naming conventions
 - We don't do env vars as configs
+- no walrus
