@@ -30,7 +30,11 @@ Local patch in `music2emo.py`:
 - Stop MERT after transformer layer 7; classifier only consumes hidden states 6 and 7.
 - Batch equal-length 30-second MERT segments in groups of four; process shorter tail singly.
 - Keep segment embeddings on the selected device and average before device transfer; avoid per-segment NPY I/O.
-- Transfer BTC chord predictions to CPU once per 10-second window, not once per frame.
+- Split per-track work into CPU-only staging (``prepare``: decode, resample,
+  segment split, CQT chord features) and GPU inference (``infer``), so callers
+  can stage one track ahead on a worker thread while the GPU predicts the
+  current one; ``predict`` remains the fused single-track path.
+- Transfer BTC chord predictions to CPU once per track, not once per 10-second window batch.
 - Drop unused chord class-index tensor; retain model-required chord-root, chord-attribute, and key features.
 - Return raw canonical mood-tag probabilities alongside upstream thresholded tags.
 - Load checkpoints from safe `safetensors` inputs: whole-state-dict safetensors

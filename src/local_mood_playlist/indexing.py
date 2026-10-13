@@ -64,18 +64,22 @@ def index_library(
             on_progress((0, len(pending), None))
         try:
             model = Music2Emotion(cache_root)
-            for index, audio_file in enumerate(pending, start=1):
-                try:
-                    prediction = model.predict(audio_file)
-                except Exception as error:
-                    failures.append(IndexFailure(audio_file, str(error)))
-                else:
-                    cache.put(audio_file, prediction)
-                    computed += 1
-                if on_progress is not None:
-                    on_progress((index, len(pending), audio_file))
-                if index % _SAVE_EVERY == 0:
-                    cache.save()
+            with model.prepare_pipeline(pending) as pipeline:
+                for index, (audio_file, prepared) in enumerate(pipeline, start=1):
+                    if isinstance(prepared, Exception):
+                        failures.append(IndexFailure(audio_file, str(prepared)))
+                    else:
+                        try:
+                            prediction = model.predict_prepared(prepared)
+                        except Exception as error:
+                            failures.append(IndexFailure(audio_file, str(error)))
+                        else:
+                            cache.put(audio_file, prediction)
+                            computed += 1
+                    if on_progress is not None:
+                        on_progress((index, len(pending), audio_file))
+                    if index % _SAVE_EVERY == 0:
+                        cache.save()
         except Exception:
             if computed > 0:
                 cache.save()

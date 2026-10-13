@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 
 import audioread
@@ -155,6 +156,21 @@ def split_audio(waveform, sample_rate):
 
     return segments
 
+@dataclass
+class PreparedAudio:
+    """CPU-staged features for one track, ready for :meth:`Music2emo.infer`."""
+
+    audio_path: str
+    segments: list[torch.Tensor]
+    segment_length: int
+    feature: np.ndarray
+    num_pad: int
+    num_instance: int
+    time_unit: float
+    n_timestep: int
+    song_length_second: float
+
+
 class Music2emo:
     def __init__(
         self,
@@ -233,16 +249,14 @@ class Music2emo:
         self.idx_to_chord = idx2voca_chord()
 
     def predict(self, audio: str | Path, threshold: float = 0.5) -> dict[str, object]:
+        return self.infer(self.prepare(audio), threshold=threshold)
 
-        feature_dir = self.work_dir / "temp_out"
+    def prepare(self, audio: str | Path) -> PreparedAudio:
+        """CPU-only audio staging for one track: decode, resample, split, CQT.
 
-        if feature_dir.exists():
-            shutil.rmtree(str(feature_dir))
-
-        feature_dir.mkdir(parents=True)
-
-        warnings.filterwarnings('ignore')
-        logger.logging_verbosity(1)
+        Runs off the model thread while the GPU processes the previous track;
+        touches no model state beyond immutable config/scalars.
+        """
 
         original_waveform, sample_rate = _load_audio(audio)
         waveform = torch.from_numpy(original_waveform)
@@ -262,19 +276,71 @@ class Music2emo:
 
         segments = split_audio(waveform, sample_rate) if is_split else [waveform]
         segment_length = segment_duration * sample_rate
-        full_segments = [segment for segment in segments if segment.size(0) == segment_length]
-        partial_segments = [segment for segment in segments if segment.size(0) != segment_length]
+
+        config = self.chord_config
+        cqt_waveform = np.asarray(audio_waveform_for_cqt)
+        if original_sample_rate != config.mp3['song_hz']:
+            cqt_waveform = librosa.resample(
+                cqt_waveform, orig_sr=original_sample_rate, target_sr=config.mp3['song_hz']
+            )
+        audio_path = str(Path(audio).expanduser().resolve(strict=True))
+        try:
+            feature, feature_per_second, song_length_second = audio_file_to_features(
+                audio_path,
+                config,
+                audio_waveform=cqt_waveform,
+                sample_rate=config.mp3['song_hz'],
+            )
+        except:
+            logger.info("audio file failed to load : %s" % audio_path)
+            assert(False)
+
+        feature = feature.T
+        feature = (feature - self.chord_mean) / self.chord_std
+        time_unit = feature_per_second
+        n_timestep = config.model['timestep']
+
+        num_pad = n_timestep - (feature.shape[0] % n_timestep)
+        feature = np.pad(feature, ((0, num_pad), (0, 0)), mode="constant", constant_values=0)
+        num_instance = feature.shape[0] // n_timestep
+
+        return PreparedAudio(
+            audio_path=audio_path,
+            segments=segments,
+            segment_length=segment_length,
+            feature=feature,
+            num_pad=num_pad,
+            num_instance=num_instance,
+            time_unit=time_unit,
+            n_timestep=n_timestep,
+            song_length_second=song_length_second,
+        )
+
+    def infer(self, prepared: PreparedAudio, threshold: float = 0.5) -> dict[str, object]:
+
+        feature_dir = self.work_dir / "temp_out"
+
+        if feature_dir.exists():
+            shutil.rmtree(str(feature_dir))
+
+        feature_dir.mkdir(parents=True)
+
+        warnings.filterwarnings('ignore')
+        logger.logging_verbosity(1)
+
+        full_segments = [segment for segment in prepared.segments if segment.size(0) == prepared.segment_length]
+        partial_segments = [segment for segment in prepared.segments if segment.size(0) != prepared.segment_length]
         batched_embeddings = [
             self.feature_extractor.extract_features_from_segments(
-                full_segments[start : start + _MERT_BATCH_SIZE], sample_rate
+                full_segments[start : start + _MERT_BATCH_SIZE], resample_rate
             )
             for start in range(0, len(full_segments), _MERT_BATCH_SIZE)
         ]
         for segment in partial_segments:
             try:
-                embedding = self.feature_extractor.extract_features_from_segment(segment, sample_rate)
+                embedding = self.feature_extractor.extract_features_from_segment(segment, resample_rate)
             except RuntimeError as error:
-                is_tiny_tail = segment.size(0) < _MIN_MERT_TAIL_SECONDS * sample_rate
+                is_tiny_tail = segment.size(0) < _MIN_MERT_TAIL_SECONDS * resample_rate
                 is_convolution_length_error = "Kernel size: (3)" in str(error)
                 if not (batched_embeddings and is_tiny_tail and is_convolution_length_error):
                     raise
@@ -285,31 +351,16 @@ class Music2emo:
 
         # --- Chord feature extract ---
         config = self.chord_config
-        mean = self.chord_mean
-        std = self.chord_std
         idx_to_chord = self.idx_to_chord
         model = self.chord_model
 
-        audio_path = str(Path(audio).expanduser().resolve(strict=True))
-        try:
-            feature, feature_per_second, song_length_second = audio_file_to_features(
-                audio_path,
-                config,
-                audio_waveform=audio_waveform_for_cqt,
-                sample_rate=original_sample_rate,
-            )
-        except:
-            logger.info("audio file failed to load : %s" % audio_path)
-            assert(False)
+        audio_path = prepared.audio_path
 
-        feature = feature.T
-        feature = (feature - mean) / std
-        time_unit = feature_per_second
-        n_timestep = config.model['timestep']
-
-        num_pad = n_timestep - (feature.shape[0] % n_timestep)
-        feature = np.pad(feature, ((0, num_pad), (0, 0)), mode="constant", constant_values=0)
-        num_instance = feature.shape[0] // n_timestep
+        feature = prepared.feature
+        time_unit = prepared.time_unit
+        n_timestep = prepared.n_timestep
+        num_pad = prepared.num_pad
+        num_instance = prepared.num_instance
 
         start_time = 0.0
         lines = []
@@ -317,14 +368,14 @@ class Music2emo:
             model.eval()
             feature = torch.tensor(feature, dtype=torch.float32).unsqueeze(0).to(self.device)
             feature_chunks = feature.reshape(num_instance, n_timestep, feature.shape[-1])
-            prediction_chunks: list[list[int]] = []
+            prediction_batches: list[torch.Tensor] = []
             for batch_start in range(0, num_instance, _BTC_BATCH_SIZE):
                 feature_batch = feature_chunks[batch_start : batch_start + _BTC_BATCH_SIZE]
                 self_attn_output, _ = model.self_attn_layers(feature_batch)
                 prediction, _ = model.output_layer(self_attn_output)
-                prediction_chunks.extend(
-                    prediction.cpu().reshape(-1, n_timestep).tolist()
-                )
+                prediction_batches.append(prediction.reshape(-1, n_timestep))
+            # Single device-to-host transfer per track instead of per batch.
+            prediction_chunks = torch.cat(prediction_batches).cpu().tolist()
 
             for t, prediction_indices in enumerate(prediction_chunks):
                 for i in range(n_timestep):
