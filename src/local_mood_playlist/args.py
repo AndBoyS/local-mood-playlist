@@ -12,7 +12,11 @@ from local_mood_playlist.moods import BlendMode, MoodName
 class IndexArgs(tap.TypedArgs):
     library: str | None = tap.arg(positional=True, help="Music library directory (default: configured library_dir)")
     cache: str | None = tap.arg(default=None, help="Prediction cache file path")
-    force: bool = tap.arg(default=False, help="Recompute predictions for every supported audio file")
+    force: bool = tap.arg(
+        default=False,
+        help="Recompute predictions for every supported audio file",
+        auto_default_help=False,
+    )
 
 
 class CreateArgs(tap.TypedArgs):
@@ -22,6 +26,7 @@ class CreateArgs(tap.TypedArgs):
         "--all",
         default=False,
         help="Offer extended model-only mood tags in the dialog (default: config `all_moods`)",
+        auto_default_help=False,
     )
     mode: BlendMode | None = tap.arg(
         "-m",
@@ -44,7 +49,11 @@ class CreateArgs(tap.TypedArgs):
     )
     library: str | None = tap.arg(default=None, help="Library root for the default prediction cache")
     cache: str | None = tap.arg(default=None, help="Prediction cache file path (overrides --library)")
-    dry_run: bool = tap.arg(default=False, help="Preview ranked tracks when cache exists; never write a playlist")
+    dry_run: bool = tap.arg(
+        default=False,
+        help="Preview ranked tracks when cache exists; never write a playlist",
+        auto_default_help=False,
+    )
 
 
 class SetupArgs(tap.TypedArgs):
