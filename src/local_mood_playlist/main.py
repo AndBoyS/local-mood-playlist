@@ -1,6 +1,7 @@
 """CLI shell for fixed-vocabulary mood playlists."""
 
 import sys
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from time import monotonic
@@ -110,26 +111,36 @@ def _fail(cmd: str, msg: str) -> NoReturn:
     raise SystemExit(2)
 
 
-def _confirm(question: str) -> bool:
+def _cancel() -> NoReturn:
+    print("Cancelled.")
+    raise SystemExit(0)
+
+
+def _run_prompt[T](run: Callable[[], T]) -> T | None:
+    """Execute an InquirerPy prompt, mapping interrupt or EOF to ``None``."""
     try:
-        answer = inquirer.confirm(question, style=PICKER_STYLE).execute()
+        return run()
     except (KeyboardInterrupt, EOFError):
-        answer = None
+        return None
+
+
+def _confirm(question: str) -> bool:
+    answer = _run_prompt(lambda: inquirer.confirm(question, style=PICKER_STYLE).execute())
     if not isinstance(answer, bool):
-        print("Cancelled.")
-        raise SystemExit(0)
+        _cancel()
     return answer
 
 
 def _prompt_path(question: str, *, default: str | None = None, only_directories: bool = True) -> str | None:
-    try:
-        answer = inquirer.filepath(
+    answer = _run_prompt(
+        lambda: inquirer.filepath(
             question,
             default="" if default is None else default,
             only_directories=only_directories,
             style=PICKER_STYLE,
         ).execute()
-    except (KeyboardInterrupt, EOFError):
+    )
+    if answer is None:
         return None
     if not isinstance(answer, str):
         raise TypeError(f"InquirerPy returned an unexpected path result: {answer!r}")
@@ -217,15 +228,14 @@ def index_cmd(args: IndexArgs) -> None:
 
 
 def _prompt_library_dir(cmd: str, *, fallback: Path | None = None) -> Path:
-    """Prompt for a library directory until it exists; empty answer re-prompts, None cancels."""
+    """Prompt for a library directory until it exists; empty answer re-prompts, cancel exits."""
     while True:
         answer = _prompt_path("Music library directory", default=str(fallback) if fallback is not None else None)
-        if answer is None or len(answer.strip()) == 0:
-            if answer is not None:
-                print(f"moodpl {cmd}: empty directory", file=sys.stderr)
-                continue
-            print("Cancelled.")
-            raise SystemExit(0)
+        if answer is None:
+            _cancel()
+        if len(answer.strip()) == 0:
+            print(f"moodpl {cmd}: empty directory", file=sys.stderr)
+            continue
         candidate = Path(answer).expanduser()
         if candidate.is_dir():
             return candidate
@@ -235,19 +245,17 @@ def _prompt_library_dir(cmd: str, *, fallback: Path | None = None) -> Path:
 def _prompt_blend_mode(current: BlendMode) -> BlendMode:
     """Prompt for the blend mode, defaulting to ``current``; cancel exits."""
     choices = [Choice(value=mode, name=f"{mode} — {BLEND_MODE_DETAIL[mode].matching}") for mode in BLEND_MODES]
-    try:
-        answer = inquirer.select(
+    answer = _run_prompt(
+        lambda: inquirer.select(
             "Blend mode",
             choices=choices,
             default=current,
             style=PICKER_STYLE,
             keybindings=MOVE_KEYBINDINGS,
         ).execute()
-    except (KeyboardInterrupt, EOFError):
-        answer = None
+    )
     if answer not in BLEND_MODES:
-        print("Cancelled.")
-        raise SystemExit(0)
+        _cancel()
     return answer
 
 
@@ -267,17 +275,15 @@ def _prompt_show_extended(current: bool) -> bool:
     """Prompt whether the picker offers extended mood tags, defaulting to ``current``; cancel exits."""
     examples = [entry.mood for entry in MOOD_ENTRIES if not entry.is_core]
     examples = ", ".join(examples[:4])
-    try:
-        answer = inquirer.confirm(
+    answer = _run_prompt(
+        lambda: inquirer.confirm(
             f"Offer extended mood tags (e.g. {examples}, ...)",
             default=current,
             style=PICKER_STYLE,
         ).execute()
-    except (KeyboardInterrupt, EOFError):
-        answer = None
+    )
     if not isinstance(answer, bool):
-        print("Cancelled.")
-        raise SystemExit(0)
+        _cancel()
     return answer
 
 
@@ -296,8 +302,7 @@ def setup_cmd(args: SetupArgs) -> None:
         if not non_interactive:
             answer = _prompt_path("Cache directory", default=str(pre_interactive_cfg.cache_dir))
             if answer is None:
-                print("Cancelled.")
-                raise SystemExit(0)
+                _cancel()
             if len(answer.strip()) > 0:
                 cache_dir = answer
 
