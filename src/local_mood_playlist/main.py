@@ -22,7 +22,8 @@ from local_mood_playlist.indexing import (
     ProgressUpdate,
     index_library,
 )
-from local_mood_playlist.moods import MoodName
+from local_mood_playlist.mood_picker import MoodSelection, ask_moods_with_mode
+from local_mood_playlist.moods import BLEND_MODE_DETAIL, BlendMode, MoodName
 from local_mood_playlist.music2emotion import MODEL_VERSION
 from local_mood_playlist.playlists import rank_cached_tracks, render_m3u8
 from local_mood_playlist.predictions import PredictionCache
@@ -275,37 +276,28 @@ def setup_cmd(args: SetupArgs) -> None:
     print("Next: moodpl index")
 
 
-def run_mood_picker(show_all: bool = False) -> list[MoodName] | None:
+def run_mood_picker(*, show_all: bool) -> MoodSelection | None:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         print("moodpl create: pass mood labels when running non-interactively", file=sys.stderr)
         raise SystemExit(2)
 
     shown = MOOD_ENTRIES if show_all else [entry for entry in MOOD_ENTRIES if entry.is_core]
-    choices = [questionary.Choice(title=[(f"fg:{entry.color}", entry.mood)], value=entry.mood) for entry in shown]
-    try:
-        selected: list[MoodName] | None = questionary.checkbox(
-            "Choose moods to blend",
-            choices=choices,
-            instruction="(Use arrows/jk to move, Space to toggle, Enter to confirm)",
-            style=PICKER_STYLE,
-        ).ask()
+    entries = [(entry.mood, entry.color) for entry in shown]
+    return ask_moods_with_mode(entries, message="Choose moods to blend", style=PICKER_STYLE)
 
-    except KeyboardInterrupt:
-        return None
 
-    if selected is None:
-        return None
-
-    return selected
+def _print_preview_details(moods: list[MoodName], *, mode: BlendMode, threshold: float) -> None:
+    detail = BLEND_MODE_DETAIL[mode]
+    print(f"  Moods: {', '.join(moods)}")
+    print(f"  Matching: {detail.matching}")
+    print(f"  Threshold: {detail.threshold_label} >= {threshold:g}")
 
 
 def _print_request_preview(
-    moods: list[MoodName], *, threshold: float, count: int | None, output_arg: str | None
+    moods: list[MoodName], *, mode: BlendMode, threshold: float, count: int | None, output_arg: str | None
 ) -> None:
     print("Playlist request preview (not ranked; no usable prediction cache)")
-    print(f"  Moods: {', '.join(moods)}")
-    print("  Matching: mean of selected mood probabilities")
-    print(f"  Threshold: mean mood probability >= {threshold:g}")
+    _print_preview_details(moods, mode=mode, threshold=threshold)
     print("  Tracks requested: all ranked tracks" if count is None else f"  Tracks requested: {count}")
     if output_arg is not None:
         print(f"  Would write: {output_arg}")
@@ -327,11 +319,14 @@ def create_cmd(args: CreateArgs) -> None:
         raise SystemExit(2)
 
     moods = args.moods
+    mode = args.mode
     if len(moods) == 0:
-        moods = run_mood_picker(show_all=args.all)
-        if moods is None or len(moods) == 0:
+        picked = run_mood_picker(show_all=args.all)
+        if picked is None:
             print("No moods selected; cancelled.")
             return
+        moods = picked.moods
+        mode = picked.mode
     if len(set(moods)) != len(moods):
         print("moodpl create: each mood label can be selected only once", file=sys.stderr)
         raise SystemExit(2)
@@ -349,7 +344,7 @@ def create_cmd(args: CreateArgs) -> None:
         _fail("create", "pass --cache or --library (or run `moodpl setup`) to use indexed predictions")
 
     if args.dry_run and (cache_path is None or not cache_path.is_file()):
-        _print_request_preview(moods, threshold=args.threshold, count=args.count, output_arg=output_arg)
+        _print_request_preview(moods, mode=mode, threshold=args.threshold, count=args.count, output_arg=output_arg)
         return
 
     if cache_path is None:
@@ -357,17 +352,16 @@ def create_cmd(args: CreateArgs) -> None:
 
     try:
         cache = PredictionCache(cache_path, model_version=MODEL_VERSION)
-        ranked = rank_cached_tracks(cache, moods=moods, limit=args.count, min_score=args.threshold)
+        ranked = rank_cached_tracks(cache, moods=moods, mode=mode, limit=args.count, min_score=args.threshold)
         output_path = Path(output_arg).expanduser() if output_arg is not None else None
         if output_path is not None:
             _validate_playlist_output_path(output_path, cache.path)
 
         if args.dry_run:
             print("Playlist preview (not written)")
-            print(f"  Moods: {', '.join(moods)}")
+            _print_preview_details(moods, mode=mode, threshold=args.threshold)
             requested = "all" if args.count is None else str(args.count)
             print(f"  Ranked tracks: {len(ranked)} of {requested} requested")
-            print(f"  Threshold: mean mood probability >= {args.threshold:g}")
             for index, track in enumerate(ranked, start=1):
                 print(f"  {index:2d}. {track.score:.4f} {track.audio_path}")
             if output_path is not None:

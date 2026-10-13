@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from local_mood_playlist.moods import MoodName
+from local_mood_playlist.moods import BlendMode, MoodName
 from local_mood_playlist.predictions import PredictionCache
 
 
@@ -17,14 +17,26 @@ class RankedTrack:
     score: float
 
 
+def blend_scores(scores: Sequence[float], mode: BlendMode) -> float:
+    """Combine nonempty probability list into one score per blend mode."""
+    match mode:
+        case "mean":
+            return math.fsum(scores) / len(scores)
+        case "and":
+            return min(scores)
+        case "or":
+            return max(scores)
+
+
 def rank_cached_tracks(
     cache: PredictionCache,
     *,
     moods: Sequence[MoodName],
+    mode: BlendMode,
     limit: int | None,
     min_score: float,
 ) -> list[RankedTrack]:
-    """Rank fresh cache entries by mean probability across requested moods."""
+    """Rank fresh cache entries by blended probability across requested moods."""
     if len(moods) == 0:
         raise ValueError("at least one mood is required")
     if limit is not None and limit < 1:
@@ -41,7 +53,7 @@ def rank_cached_tracks(
         missing_moods = [mood for mood in moods if mood not in prediction.mood_scores]
         if len(missing_moods) > 0:
             raise ValueError(f"cached prediction for {audio_path} is missing mood(s): {', '.join(missing_moods)}")
-        score = math.fsum(prediction.mood_scores[mood] for mood in moods) / len(moods)
+        score = blend_scores([prediction.mood_scores[mood] for mood in moods], mode)
         ranked.append(RankedTrack(audio_path, score))
 
     ranked.sort(key=lambda track: (-track.score, track.audio_path.as_posix()))

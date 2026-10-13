@@ -1,6 +1,6 @@
 """Fixed mood vocabulary."""
 
-from typing import Final, Literal, get_args
+from typing import Final, Literal, NamedTuple, get_args
 
 MoodName = Literal[
     "calm",
@@ -62,3 +62,30 @@ MoodName = Literal[
 ]
 
 MOOD_NAMES: Final[frozenset[MoodName]] = frozenset(get_args(MoodName))
+
+BlendMode = Literal["mean", "and", "or"]
+"""How selected mood probabilities combine into one track score.
+
+Declaration order is the blend-mode cycle order used by the interactive
+picker's ``m`` key: ``mean`` averages the scores, ``and`` keeps tracks
+matching every selected mood (minimum score), ``or`` accepts any selected
+mood (maximum score).
+"""
+
+
+class BlendModeDetail(NamedTuple):
+    """User-facing wording describing a blend mode's score and threshold."""
+
+    matching: str
+    threshold_label: str
+
+
+BLEND_MODE_DETAIL: Final[dict[BlendMode, BlendModeDetail]] = {
+    "mean": BlendModeDetail("mean of selected mood probabilities", "mean mood probability"),
+    "and": BlendModeDetail(
+        "minimum of selected mood probabilities (every mood matched)", "minimum (weakest) mood probability"
+    ),
+    "or": BlendModeDetail(
+        "maximum of selected mood probabilities (any mood matched)", "maximum (strongest) mood probability"
+    ),
+}

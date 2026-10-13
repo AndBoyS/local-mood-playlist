@@ -6,7 +6,7 @@ both see exactly the same typed args.
 
 import typed_argparse as tap
 
-from local_mood_playlist.moods import MoodName
+from local_mood_playlist.moods import BlendMode, MoodName
 
 
 class IndexArgs(tap.TypedArgs):
@@ -18,10 +18,14 @@ class IndexArgs(tap.TypedArgs):
 class CreateArgs(tap.TypedArgs):
     moods: list[MoodName] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
     all: bool = tap.arg("-a", "--all", default=False, help="Offer extended model-only mood tags in the dialog")
-    count: int | None = tap.arg("-n", default=None, help="Playlist size (default: all ranked tracks)")
-    threshold: float = tap.arg(
-        "-t", "--threshold", default=0.5, help="Minimum mean mood probability (0-1]; default: 0.5"
+    mode: BlendMode = tap.arg(
+        "-m",
+        "--mode",
+        default="and",
+        help="Blend selected mood probabilities: and (every mood), or (any mood), mean (average)",
     )
+    count: int | None = tap.arg("-n", default=None, help="Playlist size (default: all ranked tracks)")
+    threshold: float = tap.arg("-t", "--threshold", default=0.5, help="Minimum blend score (0-1]; default: 0.5")
     output: str | None = tap.arg(
         "-o", default=None, help="Playlist destination (.m3u8); use {moods} for the selected moods"
     )
