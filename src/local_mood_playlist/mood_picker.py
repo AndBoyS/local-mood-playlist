@@ -95,8 +95,8 @@ class MoodListControl(InquirerPyListControl):
 class MoodPrompt(ListPrompt):
     """Multiselect mood prompt whose ``m`` key cycles the blend mode badge."""
 
-    def __init__(self, *, message: str, choices: list[Choice], colors: dict[str, str]) -> None:
-        self._mode: BlendMode = "mean"
+    def __init__(self, *, message: str, choices: list[Choice], colors: dict[str, str], default_mode: BlendMode) -> None:
+        self._mode = default_mode
         self.content_control = MoodListControl(colors=colors, choices=choices)
         super().__init__(
             message=message,
@@ -132,16 +132,18 @@ def ask_moods_with_mode(
     entries: Sequence[MoodAndColor],
     *,
     message: str,
+    default_mode: BlendMode,
 ) -> MoodSelection | None:
-    """Show a mood multiselect; ``m`` cycles mean/and/or with a colored mode badge.
+    """Show a mood multiselect; ``m`` cycles and/or/mean with a colored mode badge.
 
-    ``entries`` are ``(mood, title_color)`` pairs. Returns the selection, or
-    ``None`` on cancel.
+    ``entries`` are ``(mood, title_color)`` pairs. The mode badge starts at
+    ``default_mode``. Returns the selection, or ``None`` on cancel.
     """
     prompt = MoodPrompt(
         message=message,
         choices=[Choice(value=mood) for mood, _ in entries],
         colors={mood: color for mood, color in entries},
+        default_mode=default_mode,
     )
     try:
         result = prompt.execute()

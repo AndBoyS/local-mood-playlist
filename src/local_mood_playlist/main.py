@@ -273,14 +273,14 @@ def setup_cmd(args: SetupArgs) -> None:
     print("Next: moodpl index")
 
 
-def run_mood_picker(*, show_all: bool) -> MoodSelection | None:
+def run_mood_picker(*, show_all: bool, default_mode: BlendMode) -> MoodSelection | None:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         print("moodpl create: pass mood labels when running non-interactively", file=sys.stderr)
         raise SystemExit(2)
 
     shown = MOOD_ENTRIES if show_all else [entry for entry in MOOD_ENTRIES if entry.is_core]
     entries = [(entry.mood, entry.color) for entry in shown]
-    return ask_moods_with_mode(entries, message="Choose moods to blend")
+    return ask_moods_with_mode(entries, message="Choose moods to blend", default_mode=default_mode)
 
 
 def _print_preview_details(moods: list[MoodName], *, mode: BlendMode, threshold: float) -> None:
@@ -316,9 +316,10 @@ def create_cmd(args: CreateArgs) -> None:
         raise SystemExit(2)
 
     moods = args.moods
-    mode = args.mode
+    cfg = resolve_configs(config_from_args(args), config_from_user_file())
+    mode = cfg.blend_mode
     if len(moods) == 0:
-        picked = run_mood_picker(show_all=args.all)
+        picked = run_mood_picker(show_all=args.all, default_mode=mode)
         if picked is None:
             print("No moods selected; cancelled.")
             return
@@ -333,7 +334,7 @@ def create_cmd(args: CreateArgs) -> None:
         output_arg = output_arg.replace("{moods}", "-".join(moods))
 
     try:
-        cache_path = resolve_configs(config_from_args(args), config_from_user_file()).pred_cache_path
+        cache_path = cfg.pred_cache_path
     except OSError as error:
         _fail("create", f"cannot locate library directory: {error}")
 

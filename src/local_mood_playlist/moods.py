@@ -63,13 +63,13 @@ MoodName = Literal[
 
 MOOD_NAMES: Final[frozenset[MoodName]] = frozenset(get_args(MoodName))
 
-BlendMode = Literal["mean", "and", "or"]
+BlendMode = Literal["and", "or", "mean"]
 """How selected mood probabilities combine into one track score.
 
 Declaration order is the blend-mode cycle order used by the interactive
-picker's ``m`` key: ``mean`` averages the scores, ``and`` keeps tracks
-matching every selected mood (minimum score), ``or`` accepts any selected
-mood (maximum score).
+picker's ``m`` key: ``and`` keeps tracks matching every selected mood
+(minimum score), ``or`` accepts any selected mood (maximum score), ``mean``
+averages the scores.
 """
 
 

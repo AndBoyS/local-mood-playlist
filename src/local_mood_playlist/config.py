@@ -22,6 +22,7 @@ from typing import Self, assert_never
 import msgspec
 
 from local_mood_playlist.args import CreateArgs, IndexArgs, SetupArgs
+from local_mood_playlist.moods import BlendMode
 
 
 def _xdg_home(var: str, fallback: str) -> Path:
@@ -54,6 +55,7 @@ class LayerConfig:
     cache_dir: Path | _Unset = UNSET
     library_dir: Path | None | _Unset = UNSET
     cache_path: Path | None | _Unset = UNSET
+    blend_mode: BlendMode | _Unset = UNSET
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,7 @@ class Config:
     cache_dir: Path
     library_dir: Path | None
     cache_path: Path | None
+    blend_mode: BlendMode
 
     @property
     def pred_cache_path(self) -> Path | None:
@@ -78,6 +81,7 @@ class Config:
         return RawConfig(
             cache_dir=str(self.cache_dir),
             library_dir=str(self.library_dir) if self.library_dir is not None else msgspec.UNSET,
+            mode=self.blend_mode,
         )
 
 
@@ -85,6 +89,7 @@ DEFAULT_CONFIG = LayerConfig(
     cache_dir=default_cache_dir(),
     library_dir=None,
     cache_path=None,
+    blend_mode="and",
 )
 
 
@@ -103,6 +108,7 @@ class RawConfig(msgspec.Struct, forbid_unknown_fields=True, omit_defaults=True):
 
     cache_dir: str | msgspec.UnsetType = msgspec.UNSET
     library_dir: str | msgspec.UnsetType = msgspec.UNSET
+    mode: BlendMode | msgspec.UnsetType = msgspec.UNSET
 
     @classmethod
     def from_user_config(cls) -> Self:
@@ -119,23 +125,28 @@ class RawConfig(msgspec.Struct, forbid_unknown_fields=True, omit_defaults=True):
             raise ValueError(f"{actual_path}: {error}") from error
 
 
-def _path_or_unset(value: str | Path | msgspec.UnsetType | _Unset | None) -> Path | _Unset:
-    """Validate one candidate value at its source boundary; blank or absent becomes UNSET.
-
-    Expanded and made absolute; a path is never silently turned into cwd by an
-    empty string.
-    """
+def _non_empty_or_unset[T](value: T | None | msgspec.UnsetType | _Unset) -> T | _Unset:
     if value is None or isinstance(value, (_Unset, msgspec.UnsetType)):
         return UNSET
-    value = str(value)
-    if len(value.strip()) == 0:
+    if isinstance(value, str) and len(value.strip()) == 0:
         return UNSET
-    return Path(value).expanduser().resolve()
+    return value
+
+
+def _path_or_unset(value: str | Path | None | msgspec.UnsetType | _Unset) -> Path | _Unset:
+    kept = _non_empty_or_unset(value)
+    return UNSET if isinstance(kept, _Unset) else Path(kept).expanduser().resolve()
 
 
 def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:
     """Return the CLI-args layer; unset flags for the given command stay UNSET."""
-    if isinstance(args, (IndexArgs, CreateArgs)):
+    if isinstance(args, CreateArgs):
+        return LayerConfig(
+            library_dir=_path_or_unset(args.library),
+            cache_path=_path_or_unset(args.cache),
+            blend_mode=_non_empty_or_unset(args.mode),
+        )
+    if isinstance(args, IndexArgs):
         return LayerConfig(
             library_dir=_path_or_unset(args.library),
             cache_path=_path_or_unset(args.cache),
@@ -154,6 +165,7 @@ def config_from_user_file() -> LayerConfig:
     return LayerConfig(
         cache_dir=_path_or_unset(raw.cache_dir),
         library_dir=_path_or_unset(raw.library_dir),
+        blend_mode=_non_empty_or_unset(raw.mode),
     )
 
 

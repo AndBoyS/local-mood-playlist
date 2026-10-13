@@ -30,7 +30,7 @@ requires explicit labels.
 - `moodpl index [DIRECTORY] [--cache PATH] [--force]` — predict missing or changed
   `.mp3`, `.m4a`, `.wav`, and `.flac` files and cache raw canonical mood scores.
   Without `DIRECTORY`, the configured `library_dir` is used.
-- `moodpl create MOOD [MOOD ...] [-n COUNT] [-o PATH] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the mean probability of selected moods and emit an M3U8 playlist. With `-o`, track entries are relative to playlist location so playlist and library can move together while keeping their directory layout. Without `-o`, playlist text goes to stdout with absolute track paths.
+- `moodpl create MOOD [MOOD ...] [-n COUNT] [-o PATH] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the minimum probability of selected moods and emit an M3U8 playlist. With `-o`, track entries are relative to playlist location so playlist and library can move together while keeping their directory layout. Without `-o`, playlist text goes to stdout with absolute track paths.
 - `moodpl --help` — show CLI help.
 
 Music2Emotion runs in-process using the main Python 3.13 environment and
@@ -42,7 +42,8 @@ non-commercial use unless you obtain separate permission.
 
 Predictions cache under `~/.cache/moodpl/predictions` by default, keyed by the
 resolved library path. The user config file (`~/.config/moodpl/config.toml`,
-created by `moodpl setup`) may set `cache_dir` and `library_dir`; CLI flags keep
+created by `moodpl setup`) may set `cache_dir`, `library_dir`, and `mode` (the
+default blend mode: `and`, `or`, or `mean`); CLI flags keep
 precedence over it. Cache records
 invalidate when audio metadata or model version changes. Cache is a local pickle;
 never load or share one from an untrusted source.

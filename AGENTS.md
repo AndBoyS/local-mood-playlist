@@ -11,7 +11,7 @@
 
 - CLI exposes a fixed mood vocabulary through `moodpl moods` and
   `moodpl create MOOD [MOOD ...]`; `moodpl create` ranks cached predictions by the
-  mean probability of selected moods and writes M3U8 output to `--output` or
+  minimum probability of selected moods and writes M3U8 output to `--output` or
   stdout. With a cache, `--dry-run` previews ranked tracks without writing;
   without a cache, it previews the request only. With no labels in a terminal,
   Questionary opens a flat multi-select picker.
