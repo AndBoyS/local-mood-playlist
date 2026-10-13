@@ -32,7 +32,7 @@ PICKER_STYLE: Final = get_style(
     }
 )
 
-_KEYBINDINGS: Final[InquirerPyKeybindings] = {
+MOVE_KEYBINDINGS: Final[InquirerPyKeybindings] = {
     "down": [{"key": "down"}, {"key": "c-n"}, {"key": "j"}],
     "up": [{"key": "up"}, {"key": "c-p"}, {"key": "k"}],
     "skip": [],
@@ -107,7 +107,7 @@ class MoodPrompt(ListPrompt):
             cycle=False,
             validate=lambda vals: isinstance(vals, list) and len(vals) > 0,
             invalid_message=_EMPTY_SELECTION_ERROR,
-            keybindings=_KEYBINDINGS,
+            keybindings=MOVE_KEYBINDINGS,
         )
         _ = self.register_kb("m")(self._cycle_mode)
 

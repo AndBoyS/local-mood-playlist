@@ -23,7 +23,12 @@ from local_mood_playlist.indexing import (
     ProgressUpdate,
     index_library,
 )
-from local_mood_playlist.mood_picker import PICKER_STYLE, MoodSelection, ask_moods_with_mode
+from local_mood_playlist.mood_picker import (
+    MOVE_KEYBINDINGS,
+    PICKER_STYLE,
+    MoodSelection,
+    ask_moods_with_mode,
+)
 from local_mood_playlist.moods import BLEND_MODE_DETAIL, BLEND_MODES, BlendMode, MoodName
 from local_mood_playlist.music2emotion import MODEL_VERSION
 from local_mood_playlist.playlists import rank_cached_tracks, render_m3u8
@@ -235,6 +240,7 @@ def _prompt_blend_mode(current: BlendMode) -> BlendMode:
             choices=choices,
             default=current,
             style=PICKER_STYLE,
+            keybindings=MOVE_KEYBINDINGS,
         ).execute()
     except (KeyboardInterrupt, EOFError):
         answer = None
