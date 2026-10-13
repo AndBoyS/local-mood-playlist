@@ -9,7 +9,14 @@ import questionary
 import typed_argparse as tap
 
 from local_mood_playlist.args import CreateArgs, IndexArgs, SetupArgs
-from local_mood_playlist.config import RawConfig, ResolvedConfig, config_path, dump_raw_config
+from local_mood_playlist.config import (
+    Config,
+    config_from_args,
+    config_from_user_file,
+    config_path,
+    dump_raw_config,
+    resolve_configs,
+)
 from local_mood_playlist.indexing import (
     AUDIO_SUFFIXES,
     ProgressUpdate,
@@ -124,7 +131,7 @@ def _prompt_path(question: str, *, default: str | None = None, only_directories:
     return answer
 
 
-def require_library_dir(cfg: ResolvedConfig, *, command: str) -> Path:
+def require_library_dir(cfg: Config, *, command: str) -> Path:
     if cfg.library_dir is None:
         _fail(command, "no library directory: pass one or run `moodpl setup`")
     return cfg.library_dir
@@ -168,7 +175,7 @@ def index_cmd(args: IndexArgs) -> None:
             print(progress_line, file=sys.stderr, flush=True)
 
     try:
-        cfg = ResolvedConfig.from_raw_and_cli(RawConfig.from_user_config(), args)
+        cfg = resolve_configs(config_from_args(args), config_from_user_file())
         library = require_library_dir(cfg, command="index")
         cache_path = cfg.pred_cache_path
         if cache_path is None:
@@ -215,7 +222,7 @@ def _prompt_library_dir(cmd: str, *, fallback: Path | None = None) -> Path:
         print(f"moodpl {cmd}: directory does not exist: {candidate}", file=sys.stderr)
 
 
-def _setup_library_dir(cfg: ResolvedConfig, *, non_interactive: bool) -> Path:
+def _setup_library_dir(cfg: Config, *, non_interactive: bool) -> Path:
     """Return the library directory for setup; interactive setup may prompt, non-interactive must fail."""
     library = cfg.library_dir
     if library is not None and library.is_dir():
@@ -230,8 +237,8 @@ def _setup_library_dir(cfg: ResolvedConfig, *, non_interactive: bool) -> Path:
 def setup_cmd(args: SetupArgs) -> None:
     non_interactive = not (sys.stdin.isatty() and sys.stdout.isatty())
     try:
-        raw = RawConfig.from_user_config()
-        pre_interactive_cfg = ResolvedConfig.from_raw_and_cli(raw, args)
+        user_cfg = config_from_user_file()
+        pre_interactive_cfg = resolve_configs(config_from_args(args), user_cfg)
         library = _setup_library_dir(pre_interactive_cfg, non_interactive=non_interactive)
 
         prompt_cache_dir: str | None = None
@@ -256,7 +263,7 @@ def setup_cmd(args: SetupArgs) -> None:
         final_args = SetupArgs(
             library=str(library), cache_dir=prompt_cache_dir if prompt_cache_dir is not None else args.cache_dir
         )
-        cfg = ResolvedConfig.from_raw_and_cli(raw, final_args)
+        cfg = resolve_configs(config_from_args(final_args), user_cfg)
         payload = dump_raw_config(cfg, cfg_path)
     except (OSError, TypeError, ValueError) as error:
         print(f"moodpl setup: {error}", file=sys.stderr)
@@ -334,7 +341,7 @@ def create_cmd(args: CreateArgs) -> None:
         output_arg = output_arg.replace("{moods}", "-".join(moods))
 
     try:
-        cache_path = ResolvedConfig.from_raw_and_cli(RawConfig.from_user_config(), args).pred_cache_path
+        cache_path = resolve_configs(config_from_args(args), config_from_user_file()).pred_cache_path
     except OSError as error:
         _fail("create", f"cannot locate library directory: {error}")
 

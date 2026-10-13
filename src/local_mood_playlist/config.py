@@ -1,13 +1,11 @@
-"""User config file.
+"""Layered config resolution.
 
-Optional TOML file: it only supplies defaults. CLI flags keep precedence over
-any value here; unknown keys and wrong value types are rejected automatically
-via msgspec (see :class:`RawConfig`).
+Configuration is a chain of typed layers, each a :class:`LayerConfig`; the
+first layer that sets a field wins:
 
-The validated file contents (:class:`RawConfig`) and the typed CLI args
-(:mod:`.args`) merge into a :class:`ResolvedConfig` in exactly one place,
-:meth:`ResolvedConfig.from_raw_and_cli`. Fields have no defaults, so callers
-must pass absent values explicitly as ``None``; nothing is silently dropped.
+1. CLI args (:func:`config_from_args`)
+2. User TOML file (:func:`config_from_user_file`, at :func:`config_path`)
+3. Built-in defaults (:data:`DEFAULT_CONFIG`)
 
 This module is also the single owner of cache-path resolution.
 """
@@ -17,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Self, assert_never
 
@@ -35,6 +33,59 @@ def _xdg_home(var: str, fallback: str) -> Path:
 def default_cache_dir() -> Path:
     """Return the user-level default cache root: ``$XDG_CACHE_HOME/moodpl`` or ``~/.cache/moodpl``."""
     return _xdg_home("XDG_CACHE_HOME", ".cache") / "moodpl"
+
+
+class _Unset:
+    """Sentinel for "this layer does not set this field"."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "UNSET"
+
+
+UNSET = _Unset()
+
+
+@dataclass(frozen=True)
+class LayerConfig:
+    """Values set by one source."""
+
+    cache_dir: Path | _Unset = UNSET
+    library_dir: Path | None | _Unset = UNSET
+    cache_path: Path | None | _Unset = UNSET
+
+
+@dataclass(frozen=True)
+class Config:
+    """Fully resolved config layers merged by :func:`resolve_configs`."""
+
+    cache_dir: Path
+    library_dir: Path | None
+    cache_path: Path | None
+
+    @property
+    def pred_cache_path(self) -> Path | None:
+        if self.cache_path is not None:
+            return self.cache_path
+        if self.library_dir is None:
+            return None
+        resolved_library = self.library_dir.resolve(strict=True)
+        library_id = hashlib.sha256(str(resolved_library).encode("utf-8")).hexdigest()[:20]
+        return self.cache_dir / "predictions" / f"predictions-{library_id}.pkl"
+
+    def to_raw(self) -> RawConfig:
+        return RawConfig(
+            cache_dir=str(self.cache_dir),
+            library_dir=str(self.library_dir) if self.library_dir is not None else msgspec.UNSET,
+        )
+
+
+DEFAULT_CONFIG = LayerConfig(
+    cache_dir=default_cache_dir(),
+    library_dir=None,
+    cache_path=None,
+)
 
 
 def config_path() -> Path:
@@ -68,91 +119,65 @@ class RawConfig(msgspec.Struct, forbid_unknown_fields=True, omit_defaults=True):
             raise ValueError(f"{actual_path}: {error}") from error
 
 
-@dataclass(frozen=True)
-class ResolvedConfig:
-    """Config resolved from the file and the typed CLI args; CLI args win.
+def _path_or_unset(value: str | Path | msgspec.UnsetType | _Unset | None) -> Path | _Unset:
+    """Validate one candidate value at its source boundary; blank or absent becomes UNSET.
 
-    Created only by :meth:`from_raw_and_cli` — consumers never re-derive values
-    from the file or the environment.
+    Expanded and made absolute; a path is never silently turned into cwd by an
+    empty string.
     """
+    if value is None or isinstance(value, (_Unset, msgspec.UnsetType)):
+        return UNSET
+    value = str(value)
+    if len(value.strip()) == 0:
+        return UNSET
+    return Path(value).expanduser().resolve()
 
-    cache_dir: Path
-    library_dir: Path | None
-    cache_path: Path | None
 
-    @classmethod
-    def from_raw_and_cli(cls, raw: RawConfig, args: IndexArgs | CreateArgs | SetupArgs) -> Self:
-        """Merge the validated config file with the typed CLI args; CLI args win."""
-
-        args_cache: str | None = None
-        args_cache_dir: str | None = None
-        if isinstance(args, (IndexArgs, CreateArgs)):
-            args_cache = args.cache
-        elif isinstance(args, SetupArgs):
-            args_cache_dir = args.cache_dir
-        else:
-            assert_never(args)
-
-        cache_dir = _to_path(
-            _pick_first_non_empty(
-                args_cache_dir,
-                raw.cache_dir,
-            )
+def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:
+    """Return the CLI-args layer; unset flags for the given command stay UNSET."""
+    if isinstance(args, (IndexArgs, CreateArgs)):
+        return LayerConfig(
+            library_dir=_path_or_unset(args.library),
+            cache_path=_path_or_unset(args.cache),
         )
-        if cache_dir is None:
-            cache_dir = default_cache_dir()
-
-        return cls(
-            cache_dir=cache_dir,
-            library_dir=_to_path(
-                _pick_first_non_empty(
-                    args.library,
-                    raw.library_dir,
-                )
-            ),
-            cache_path=_to_path(
-                _pick_first_non_empty(
-                    args_cache,
-                )
-            ),
+    if isinstance(args, SetupArgs):
+        return LayerConfig(
+            cache_dir=_path_or_unset(args.cache_dir),
+            library_dir=_path_or_unset(args.library),
         )
-
-    def to_raw(self) -> RawConfig:
-        return RawConfig(
-            cache_dir=str(self.cache_dir),
-            library_dir=str(self.library_dir) if self.library_dir is not None else msgspec.UNSET,
-        )
-
-    @property
-    def pred_cache_path(self) -> Path | None:
-        if self.cache_path is not None:
-            return self.cache_path
-        if self.library_dir is None:
-            return None
-        resolved_library = self.library_dir.resolve(strict=True)
-        library_id = hashlib.sha256(str(resolved_library).encode("utf-8")).hexdigest()[:20]
-        return self.cache_dir / "predictions" / f"predictions-{library_id}.pkl"
+    assert_never(args)
 
 
-def _pick_first_non_empty(*candidates: str | Path | msgspec.UnsetType | None) -> str | Path | None:
-    """Select the first candidate that is set and non-empty; no path conversion here."""
-    for candidate in candidates:
-        if candidate is None or isinstance(candidate, msgspec.UnsetType):
-            continue
-        if isinstance(candidate, str) and len(candidate.strip()) == 0:
-            continue
-        return candidate
-    return None
+def config_from_user_file() -> LayerConfig:
+    """Return the user config-file layer; absent keys stay UNSET."""
+    raw = RawConfig.from_user_config()
+    return LayerConfig(
+        cache_dir=_path_or_unset(raw.cache_dir),
+        library_dir=_path_or_unset(raw.library_dir),
+    )
 
 
-def _to_path(val: str | Path | None) -> Path | None:
-    """Convert a chosen value to an expanded, absolute Path; None stays None (never becomes cwd)."""
-    if val is None:
-        return None
-    return Path(val).expanduser().resolve()
+def _pick_field[T](*values: T | _Unset) -> T:
+    """Return the first value that is not ``UNSET``; DEFAULT_CONFIG last must cover every field."""
+    for value in values:
+        if not isinstance(value, _Unset):
+            return value
+    msg = "config field set in no layer and missing from DEFAULT_CONFIG"
+    raise ValueError(msg)
 
 
-def dump_raw_config(cfg: ResolvedConfig, path: Path | None = None) -> dict[str, object]:
+def resolve_configs(*layers: LayerConfig, default: LayerConfig = DEFAULT_CONFIG) -> Config:
+    """Merge config layers: for each field the first non-UNSET value wins."""
+    chain = (*layers, default)
+
+    kwargs: dict[str, object] = {}
+    for field in fields(LayerConfig):
+        kwargs[field.name] = _pick_field(*(getattr(chain_layer, field.name) for chain_layer in chain))
+    return Config(**kwargs)  # pyrefly: ignore[bad-argument-type]
+
+
+def dump_raw_config(cfg: Config, path: Path | None = None) -> dict[str, object]:
+    """Write the resolved config to the user config file (or ``path``); return the TOML payload."""
     raw = cfg.to_raw()
 
     target = path if path is not None else config_path()

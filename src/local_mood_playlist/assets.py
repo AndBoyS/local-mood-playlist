@@ -3,7 +3,7 @@
 Each cache file is downloaded once from the pinned vendored Hugging Face revision
 (:data:`VENDORED_REPO` / :data:`VENDORED_REVISION`) and cached under
 ``<cache root>/moodpl/assets/<revision>/{music2emo,mert}`` (the caller supplies
-the cache root, resolved from its :class:`~local_mood_playlist.config.ResolvedConfig`),
+the cache root, resolved from its :class:`~local_mood_playlist.config.Config`),
 mirroring the same ``{music2emo,mert}`` layout.
 The payload bytes are pre-transformed per upstream revision by
 ``scripts/publish_assets.py`` (Lightning checkpoints → safetensors, scalar
