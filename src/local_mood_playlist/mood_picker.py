@@ -1,32 +1,42 @@
-"""Checkbox mood picker with a live-blend-mode toggle key."""
+"""Checkbox mood picker with a live-blend-mode toggle key (InquirerPy)."""
 
 from collections.abc import Sequence
-from typing import Final, NamedTuple, get_args
+from typing import Final, NamedTuple, get_args, override
 
-from prompt_toolkit.application import Application
-from prompt_toolkit.formatted_text import FormattedText
-from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
-from prompt_toolkit.keys import Keys
-from prompt_toolkit.styles import Style
-from questionary import Choice
-from questionary.constants import DEFAULT_QUESTION_PREFIX, DEFAULT_SELECTED_POINTER, INVALID_INPUT
-from questionary.prompts import common
-from questionary.question import Question
-from questionary.styles import merge_styles_default
+from InquirerPy.base.control import Choice
+from InquirerPy.prompts.list import InquirerPyListControl, ListPrompt
+from InquirerPy.utils import InquirerPyKeybindings, get_style
+from prompt_toolkit.key_binding import KeyPressEvent
 
 from local_mood_playlist.moods import BlendMode, MoodName
 
 _MODE_CYCLE: Final[tuple[BlendMode, ...]] = get_args(BlendMode)
 
-_INSTRUCTION: Final[str] = "(arrows/jk move, Space toggle, <m> blend mode, Enter confirm)"
+_INSTRUCTION: Final[str] = "(↑↓/jk move, Space toggle, <m> blend mode, Enter confirm)"
+_EMPTY_SELECTION_ERROR: Final[str] = "select at least one mood"
 
-_MODE_STYLE: Final = Style(
-    [
-        ("mode-mean", "fg:#8db9d8 bold"),
-        ("mode-and", "fg:#d99a6c bold"),
-        ("mode-or", "fg:#d6a0c2 bold"),
-    ]
+_POINTER: Final[str] = "›"
+_MARKER: Final[str] = "◉"
+_MARKER_PLACEHOLDER: Final[str] = "○"
+
+PICKER_STYLE: Final = get_style(
+    {
+        "questionmark": "bold",
+        "question": "bold",
+        "pointer": "fg:ansicyan bold",
+        "marker": "fg:ansigreen",
+        "instruction": "fg:ansibrightblack italic",
+        "mode-mean": "fg:#8db9d8 bold",
+        "mode-and": "fg:#d99a6c bold",
+        "mode-or": "fg:#d6a0c2 bold",
+    }
 )
+
+_KEYBINDINGS: Final[InquirerPyKeybindings] = {
+    "down": [{"key": "down"}, {"key": "c-n"}, {"key": "j"}],
+    "up": [{"key": "up"}, {"key": "c-p"}, {"key": "k"}],
+    "skip": [],
+}
 
 
 class MoodSelection(NamedTuple):
@@ -34,6 +44,81 @@ class MoodSelection(NamedTuple):
 
     moods: list[MoodName]
     mode: BlendMode
+
+
+def _mood_color_name_enabled(choice: dict[str, object]) -> tuple[str, str, bool]:
+    value = choice["value"]
+    name = choice["name"]
+    enabled = choice["enabled"]
+    if not isinstance(value, str) or not isinstance(name, str) or not isinstance(enabled, bool):
+        raise TypeError(f"InquirerPy choice has an unexpected shape: {choice!r}")
+    return value, name, enabled
+
+
+class MoodListControl(InquirerPyListControl):
+    """List control rendering each mood in its family color."""
+
+    def __init__(self, *, colors: dict[str, str], choices: list[Choice]) -> None:
+        self._colors = colors
+        super().__init__(
+            choices=choices,
+            default=None,
+            pointer=_POINTER,
+            marker=_MARKER,
+            session_result=None,
+            multiselect=True,
+            marker_pl=_MARKER_PLACEHOLDER,
+        )
+
+    @override
+    def _get_hover_text(self, choice: dict[str, object]) -> list[tuple[str, str]]:
+        mood, name, enabled = _mood_color_name_enabled(choice)
+        color = self._colors[mood]
+        return [
+            ("class:pointer", self._pointer),
+            (f"bold fg:{color}", self._marker if enabled else self._marker_pl),
+            ("[SetCursorPosition]", ""),
+            (f"bold fg:{color}", name),
+        ]
+
+    @override
+    def _get_normal_text(self, choice: dict[str, object]) -> list[tuple[str, str]]:
+        mood, name, enabled = _mood_color_name_enabled(choice)
+        color = self._colors[mood]
+        return [
+            ("", " " * len(self._pointer)),
+            ("class:marker", self._marker if enabled else self._marker_pl),
+            (f"fg:{color}", name),
+        ]
+
+
+class MoodPrompt(ListPrompt):
+    """Multiselect mood prompt whose ``m`` key cycles the blend mode badge."""
+
+    def __init__(self, *, message: str, choices: list[Choice], colors: dict[str, str]) -> None:
+        self._mode: BlendMode = "mean"
+        self.content_control = MoodListControl(colors=colors, choices=choices)
+        super().__init__(
+            message=message,
+            choices=choices,
+            multiselect=True,
+            instruction=_INSTRUCTION,
+            style=PICKER_STYLE,
+            cycle=False,
+            validate=lambda vals: isinstance(vals, list) and len(vals) > 0,
+            invalid_message=_EMPTY_SELECTION_ERROR,
+            keybindings=_KEYBINDINGS,
+        )
+        _ = self.register_kb("m")(self._cycle_mode)
+
+    @override
+    def _get_prompt_message(self) -> list[tuple[str, str]]:
+        message = super()._get_prompt_message()
+        message.insert(len(message) - 1, (f"class:mode-{self._mode}", f" [{self._mode}]"))
+        return message
+
+    def _cycle_mode(self, _event: KeyPressEvent) -> None:
+        self._mode = _next_mode(self._mode)
 
 
 def _next_mode(mode: BlendMode) -> BlendMode:
@@ -47,101 +132,22 @@ def ask_moods_with_mode(
     entries: Sequence[MoodAndColor],
     *,
     message: str,
-    style: Style,
 ) -> MoodSelection | None:
-    """Show a mood checkbox; ``m`` cycles mean/and/or with a colored mode badge.
+    """Show a mood multiselect; ``m`` cycles mean/and/or with a colored mode badge.
 
     ``entries`` are ``(mood, title_color)`` pairs. Returns the selection, or
     ``None`` on cancel.
     """
-    mode: BlendMode = "mean"
-    choices = [Choice(title=[(f"fg:{color}", mood)], value=mood) for mood, color in entries]
-    ic = common.InquirerControl(choices, pointer=DEFAULT_SELECTED_POINTER)
-    merged_style = merge_styles_default(
-        [Style([("bottom-toolbar", "noreverse")]), style, _MODE_STYLE],
+    prompt = MoodPrompt(
+        message=message,
+        choices=[Choice(value=mood) for mood, _ in entries],
+        colors={mood: color for mood, color in entries},
     )
-
-    def get_prompt_tokens() -> list[tuple[str, str]]:
-        tokens: list[tuple[str, str]] = [
-            ("class:qmark", DEFAULT_QUESTION_PREFIX),
-            ("class:question", f" {message} "),
-        ]
-        if ic.is_answered:
-            selected = len(ic.selected_options)
-            tokens.append(("class:answer", "done" if selected == 0 else f"done ({selected} selections)"))
-            tokens.append((f"class:mode-{mode}", f" [{mode}]"))
-            return tokens
-        tokens.append((f"class:mode-{mode}", f"[{mode}] "))
-        tokens.append(("class:instruction", _INSTRUCTION))
-        return tokens
-
-    def get_selected_values() -> list[object]:
-        return [choice.value for choice in ic.get_selected_values()]
-
-    def perform_validation(selected_values: list[object]) -> bool:
-        if len(selected_values) == 0 and ic.submission_attempted:
-            ic.error_message = FormattedText([("class:validation-toolbar", INVALID_INPUT)])
-        else:
-            ic.error_message = None
-        return len(selected_values) > 0 or not ic.submission_attempted
-
-    layout = common.create_inquirer_layout(ic, get_prompt_tokens)
-
-    bindings = KeyBindings()
-
-    @bindings.add(Keys.ControlC, eager=True)
-    def abort(event: KeyPressEvent) -> None:
-        event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
-
-    @bindings.add(" ", eager=True)
-    def toggle(_event: KeyPressEvent) -> None:
-        pointed_choice = ic.get_pointed_at().value
-        if pointed_choice in ic.selected_options:
-            ic.selected_options.remove(pointed_choice)
-        else:
-            ic.selected_options.append(pointed_choice)
-        _ = perform_validation(get_selected_values())
-
-    @bindings.add("m", eager=True)
-    def cycle_mode(_event: KeyPressEvent) -> None:
-        nonlocal mode
-        mode = _next_mode(mode)
-
-    @bindings.add(Keys.Down, eager=True)
-    @bindings.add("j", eager=True)
-    @bindings.add(Keys.ControlN, eager=True)
-    def move_cursor_down(_event: KeyPressEvent) -> None:
-        ic.select_next()
-        while not ic.is_selection_valid():
-            ic.select_next()
-
-    @bindings.add(Keys.Up, eager=True)
-    @bindings.add("k", eager=True)
-    @bindings.add(Keys.ControlP, eager=True)
-    def move_cursor_up(_event: KeyPressEvent) -> None:
-        ic.select_previous()
-        while not ic.is_selection_valid():
-            ic.select_previous()
-
-    @bindings.add(Keys.ControlM, eager=True)
-    def set_answer(event: KeyPressEvent) -> None:
-        selected_values = get_selected_values()
-        ic.submission_attempted = True
-        if perform_validation(selected_values):
-            ic.is_answered = True
-            event.app.exit(result=selected_values)
-
-    @bindings.add(Keys.Any)
-    def other(_event: KeyPressEvent) -> None:
-        """Disallow inserting other text."""
-
-    question = Question(Application(layout=layout, key_bindings=bindings, style=merged_style))
-    # Suppress questionary's own "Cancelled by user"; the caller owns cancel messaging.
-    if question.ask(kbi_msg="") is None:
+    try:
+        result = prompt.execute()
+    except KeyboardInterrupt:
         return None
-    # questionary surfaces selection values as `Any`; rebuild the answer from the
-    # typed entries instead of trusting that pipeline. The choice values were set
-    # from `entries` above and only our own key bindings write `selected_options`.
-    selected: set[object] = set(ic.selected_options)
-    moods = [mood for mood, _ in entries if mood in selected]
-    return MoodSelection(moods=moods, mode=mode)
+    if not isinstance(result, list):
+        raise TypeError(f"InquirerPy returned an unexpected picker result: {result!r}")
+    moods = [mood for mood, _ in entries if mood in result]
+    return MoodSelection(moods=moods, mode=prompt._mode)

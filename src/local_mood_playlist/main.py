@@ -5,8 +5,8 @@ from pathlib import Path
 from time import monotonic
 from typing import NamedTuple, NoReturn
 
-import questionary
 import typed_argparse as tap
+from InquirerPy import inquirer
 
 from local_mood_playlist.args import CreateArgs, IndexArgs, SetupArgs
 from local_mood_playlist.config import (
@@ -22,7 +22,7 @@ from local_mood_playlist.indexing import (
     ProgressUpdate,
     index_library,
 )
-from local_mood_playlist.mood_picker import MoodSelection, ask_moods_with_mode
+from local_mood_playlist.mood_picker import PICKER_STYLE, MoodSelection, ask_moods_with_mode
 from local_mood_playlist.moods import BLEND_MODE_DETAIL, BlendMode, MoodName
 from local_mood_playlist.music2emotion import MODEL_VERSION
 from local_mood_playlist.playlists import rank_cached_tracks, render_m3u8
@@ -97,16 +97,6 @@ MOOD_ENTRIES: list[MoodEntry] = [
 
 _MAX_FAILURES_TO_PRINT = 20
 
-PICKER_STYLE = questionary.Style(
-    [
-        ("question", "bold"),
-        ("pointer", "fg:ansicyan bold"),
-        ("highlighted", "fg:ansicyan bold"),
-        ("selected", "fg:ansigreen"),
-        ("instruction", "fg:ansibrightblack italic"),
-    ]
-)
-
 
 def _fail(cmd: str, msg: str) -> NoReturn:
     print(f"moodpl {cmd}: {msg}", file=sys.stderr)
@@ -114,21 +104,28 @@ def _fail(cmd: str, msg: str) -> NoReturn:
 
 
 def _confirm(question: str) -> bool:
-    answer: bool | None = questionary.confirm(question, style=PICKER_STYLE).ask()
-    if answer is None:
+    try:
+        answer = inquirer.confirm(question, style=PICKER_STYLE).execute()
+    except (KeyboardInterrupt, EOFError):
+        answer = None
+    if not isinstance(answer, bool):
         print("Cancelled.")
         raise SystemExit(0)
     return answer
 
 
 def _prompt_path(question: str, *, default: str | None = None, only_directories: bool = True) -> str | None:
-    prompt_default = default if default is not None else ""
     try:
-        answer: str | None = questionary.path(
-            question, default=prompt_default, only_directories=only_directories, style=PICKER_STYLE
-        ).ask()
+        answer = inquirer.filepath(
+            question,
+            default="" if default is None else default,
+            only_directories=only_directories,
+            style=PICKER_STYLE,
+        ).execute()
     except (KeyboardInterrupt, EOFError):
         return None
+    if not isinstance(answer, str):
+        raise TypeError(f"InquirerPy returned an unexpected path result: {answer!r}")
     return answer
 
 
@@ -283,7 +280,7 @@ def run_mood_picker(*, show_all: bool) -> MoodSelection | None:
 
     shown = MOOD_ENTRIES if show_all else [entry for entry in MOOD_ENTRIES if entry.is_core]
     entries = [(entry.mood, entry.color) for entry in shown]
-    return ask_moods_with_mode(entries, message="Choose moods to blend", style=PICKER_STYLE)
+    return ask_moods_with_mode(entries, message="Choose moods to blend")
 
 
 def _print_preview_details(moods: list[MoodName], *, mode: BlendMode, threshold: float) -> None:
