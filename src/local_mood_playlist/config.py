@@ -56,6 +56,10 @@ class LayerConfig:
     library_dir: Path | None | _Unset = UNSET
     cache_path: Path | None | _Unset = UNSET
     blend_mode: BlendMode | _Unset = UNSET
+    threshold: float | _Unset = UNSET
+    count: int | None | _Unset = UNSET
+    output: str | None | _Unset = UNSET
+    all_moods: bool | _Unset = UNSET
 
 
 @dataclass(frozen=True)
@@ -66,6 +70,10 @@ class Config:
     library_dir: Path | None
     cache_path: Path | None
     blend_mode: BlendMode
+    threshold: float
+    count: int | None
+    output: str | None
+    all_moods: bool
 
     @property
     def pred_cache_path(self) -> Path | None:
@@ -82,6 +90,10 @@ class Config:
             cache_dir=str(self.cache_dir),
             library_dir=str(self.library_dir) if self.library_dir is not None else msgspec.UNSET,
             mode=self.blend_mode,
+            threshold=self.threshold,
+            count=self.count if self.count is not None else msgspec.UNSET,
+            output=self.output if self.output is not None else msgspec.UNSET,
+            all_moods=self.all_moods,
         )
 
 
@@ -90,6 +102,10 @@ DEFAULT_CONFIG = LayerConfig(
     library_dir=None,
     cache_path=None,
     blend_mode="and",
+    threshold=0.5,
+    count=None,
+    output=None,
+    all_moods=False,
 )
 
 
@@ -109,6 +125,10 @@ class RawConfig(msgspec.Struct, forbid_unknown_fields=True, omit_defaults=True):
     cache_dir: str | msgspec.UnsetType = msgspec.UNSET
     library_dir: str | msgspec.UnsetType = msgspec.UNSET
     mode: BlendMode | msgspec.UnsetType = msgspec.UNSET
+    threshold: float | msgspec.UnsetType = msgspec.UNSET
+    count: int | msgspec.UnsetType = msgspec.UNSET
+    output: str | msgspec.UnsetType = msgspec.UNSET
+    all_moods: bool | msgspec.UnsetType = msgspec.UNSET
 
     @classmethod
     def from_user_config(cls) -> Self:
@@ -145,6 +165,10 @@ def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:
             library_dir=_path_or_unset(args.library),
             cache_path=_path_or_unset(args.cache),
             blend_mode=_non_empty_or_unset(args.mode),
+            threshold=_non_empty_or_unset(args.threshold),
+            count=_non_empty_or_unset(args.count),
+            output=_non_empty_or_unset(args.output),
+            all_moods=True if args.all else UNSET,
         )
     if isinstance(args, IndexArgs):
         return LayerConfig(
@@ -167,6 +191,10 @@ def config_from_user_file() -> LayerConfig:
         cache_dir=_path_or_unset(raw.cache_dir),
         library_dir=_path_or_unset(raw.library_dir),
         blend_mode=_non_empty_or_unset(raw.mode),
+        threshold=_non_empty_or_unset(raw.threshold),
+        count=_non_empty_or_unset(raw.count),
+        output=_non_empty_or_unset(raw.output),
+        all_moods=_non_empty_or_unset(raw.all_moods),
     )
 
 

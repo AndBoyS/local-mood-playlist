@@ -17,7 +17,12 @@ class IndexArgs(tap.TypedArgs):
 
 class CreateArgs(tap.TypedArgs):
     moods: list[MoodName] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
-    all: bool = tap.arg("-a", "--all", default=False, help="Offer extended model-only mood tags in the dialog")
+    all: bool = tap.arg(
+        "-a",
+        "--all",
+        default=False,
+        help="Offer extended model-only mood tags in the dialog (default: config `all_moods`)",
+    )
     mode: BlendMode | None = tap.arg(
         "-m",
         "--mode",
@@ -25,10 +30,17 @@ class CreateArgs(tap.TypedArgs):
         help="Blend selected mood probabilities: and (every mood), or (any mood), mean (average); "
         "default: config `mode`",
     )
-    count: int | None = tap.arg("-n", default=None, help="Playlist size (default: all ranked tracks)")
-    threshold: float = tap.arg("-t", "--threshold", default=0.5, help="Minimum blend score (0-1]; default: 0.5")
+    count: int | None = tap.arg("-n", default=None, help="Playlist size (default: config `count` or all ranked tracks)")
+    threshold: float | None = tap.arg(
+        "-t",
+        "--threshold",
+        default=None,
+        help="Minimum blend score in (0, 1]; default: config `threshold` or 0.5",
+    )
     output: str | None = tap.arg(
-        "-o", default=None, help="Playlist destination (.m3u8); use {moods} for the selected moods"
+        "-o",
+        default=None,
+        help="Playlist destination (.m3u8); use {moods} for the selected moods (default: config `output` or stdout)",
     )
     library: str | None = tap.arg(default=None, help="Library root for the default prediction cache")
     cache: str | None = tap.arg(default=None, help="Prediction cache file path (overrides --library)")

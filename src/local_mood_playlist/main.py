@@ -178,6 +178,8 @@ def index_cmd(args: IndexArgs) -> None:
 
     try:
         cfg = resolve_configs(config_from_args(args), config_from_user_file())
+        force = args.force
+        del args  # remaining fields resolve through cfg
         library = require_library_dir(cfg, command="index")
         cache_path = cfg.pred_cache_path
         if cache_path is None:
@@ -186,7 +188,7 @@ def index_cmd(args: IndexArgs) -> None:
             library,
             cache_path=cache_path,
             cache_root=cfg.cache_dir,
-            force=args.force,
+            force=force,
             on_progress=report_progress,
         )
     except (OSError, TypeError, ValueError, RuntimeError) as error:
@@ -256,23 +258,29 @@ def _setup_library_dir(cfg: Config, *, non_interactive: bool) -> Path:
 
 def setup_cmd(args: SetupArgs) -> None:
     non_interactive = not (sys.stdin.isatty() and sys.stdout.isatty())
+    arg_config = config_from_args(args)
+    cache_dir = args.cache_dir
+    mode = args.mode
+    del args  # remaining fields resolve through config/prompts
     try:
         user_cfg = config_from_user_file()
-        pre_interactive_cfg = resolve_configs(config_from_args(args), user_cfg)
+        pre_interactive_cfg = resolve_configs(arg_config, user_cfg)
         library = _setup_library_dir(pre_interactive_cfg, non_interactive=non_interactive)
 
-        prompt_cache_dir = args.cache_dir
-        if args.cache_dir is None and not non_interactive:
+        if not non_interactive:
             answer = _prompt_path("Cache directory", default=str(pre_interactive_cfg.cache_dir))
-            prompt_cache_dir = answer if answer is not None and len(answer.strip()) > 0 else None
+            if answer is None:
+                print("Cancelled.")
+                raise SystemExit(0)
+            if len(answer.strip()) > 0:
+                cache_dir = answer
 
         audio_count = sum(path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES for path in library.rglob("*"))
         if audio_count == 0:
             print(f"warning: no supported audio files found yet under {library}", file=sys.stderr)
 
-        prompt_mode = args.mode
         if not non_interactive:
-            prompt_mode = _prompt_blend_mode(pre_interactive_cfg.blend_mode)
+            mode = _prompt_blend_mode(pre_interactive_cfg.blend_mode)
 
         cfg_path = config_path()
         if cfg_path.is_file():
@@ -286,8 +294,8 @@ def setup_cmd(args: SetupArgs) -> None:
 
         final_args = SetupArgs(
             library=str(library),
-            cache_dir=prompt_cache_dir,
-            mode=prompt_mode,
+            cache_dir=cache_dir,
+            mode=mode,
         )
         cfg = resolve_configs(config_from_args(final_args), user_cfg)
         payload = dump_raw_config(cfg, cfg_path)
@@ -336,18 +344,20 @@ def _validate_playlist_output_path(output_path: Path, cache_path: Path | None) -
 
 
 def create_cmd(args: CreateArgs) -> None:
-    if args.count is not None and args.count < 1:
-        print("moodpl create: --count must be at least 1", file=sys.stderr)
+    cfg = resolve_configs(config_from_args(args), config_from_user_file())
+    moods = args.moods
+    dry_run = args.dry_run
+    del args  # remaining fields resolve through cfg
+    if cfg.count is not None and cfg.count < 1:
+        print("moodpl create: playlist size must be at least 1 (check --count or config `count`)", file=sys.stderr)
         raise SystemExit(2)
-    if args.threshold <= 0 or args.threshold > 1:
-        print("moodpl create: --threshold must be in (0, 1]", file=sys.stderr)
+    if not 0 < cfg.threshold <= 1:
+        print("moodpl create: threshold must be in (0, 1] (check --threshold or config `threshold`)", file=sys.stderr)
         raise SystemExit(2)
 
-    moods = args.moods
-    cfg = resolve_configs(config_from_args(args), config_from_user_file())
     mode = cfg.blend_mode
     if len(moods) == 0:
-        picked = run_mood_picker(show_all=args.all, default_mode=mode)
+        picked = run_mood_picker(show_all=cfg.all_moods, default_mode=mode)
         if picked is None:
             print("No moods selected; cancelled.")
             return
@@ -357,7 +367,7 @@ def create_cmd(args: CreateArgs) -> None:
         print("moodpl create: each mood label can be selected only once", file=sys.stderr)
         raise SystemExit(2)
 
-    output_arg = args.output
+    output_arg = cfg.output
     if output_arg is not None and "{moods}" in output_arg:
         output_arg = output_arg.replace("{moods}", "-".join(moods))
 
@@ -365,11 +375,11 @@ def create_cmd(args: CreateArgs) -> None:
         _ = require_library_dir(cfg, command="create")
     cache_path = cfg.pred_cache_path
 
-    if cache_path is None and not args.dry_run:
+    if cache_path is None and not dry_run:
         _fail("create", "pass --cache or --library (or run `moodpl setup`) to use indexed predictions")
 
-    if args.dry_run and (cache_path is None or not cache_path.is_file()):
-        _print_request_preview(moods, mode=mode, threshold=args.threshold, count=args.count, output_arg=output_arg)
+    if dry_run and (cache_path is None or not cache_path.is_file()):
+        _print_request_preview(moods, mode=mode, threshold=cfg.threshold, count=cfg.count, output_arg=output_arg)
         return
 
     if cache_path is None:
@@ -377,15 +387,15 @@ def create_cmd(args: CreateArgs) -> None:
 
     try:
         cache = PredictionCache(cache_path, model_version=MODEL_VERSION)
-        ranked = rank_cached_tracks(cache, moods=moods, mode=mode, limit=args.count, min_score=args.threshold)
+        ranked = rank_cached_tracks(cache, moods=moods, mode=mode, limit=cfg.count, min_score=cfg.threshold)
         output_path = Path(output_arg).expanduser() if output_arg is not None else None
         if output_path is not None:
             _validate_playlist_output_path(output_path, cache.path)
 
-        if args.dry_run:
+        if dry_run:
             print("Playlist preview (not written)")
-            _print_preview_details(moods, mode=mode, threshold=args.threshold)
-            requested = "all" if args.count is None else str(args.count)
+            _print_preview_details(moods, mode=mode, threshold=cfg.threshold)
+            requested = "all" if cfg.count is None else str(cfg.count)
             print(f"  Ranked tracks: {len(ranked)} of {requested} requested")
             for index, track in enumerate(ranked, start=1):
                 print(f"  {index:2d}. {track.score:.4f} {track.audio_path}")

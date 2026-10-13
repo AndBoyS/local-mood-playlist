@@ -23,14 +23,15 @@ requires explicit labels.
 ## Commands
 
 - `moodpl moods` — list selectable labels in a flat, mood-ordered list.
-- `moodpl setup [--library DIRECTORY] [--cache-dir PATH]` — write the user config
-  interactively (Questionary path prompts); missing directories are re-prompted.
-  Non-interactive use requires `--library`. Prompts are skipped for supplied
-  values, and an existing config is only overwritten after confirmation.
+- `moodpl setup [--library DIRECTORY] [--cache-dir PATH] [-m MODE]` — write the
+  user config interactively (prompts for library, cache dir, and blend mode,
+  each prefilled from the current config or flag; missing directories are
+  re-prompted). Non-interactive use requires `--library`. An existing config is
+  only overwritten after confirmation.
 - `moodpl index [DIRECTORY] [--cache PATH] [--force]` — predict missing or changed
   `.mp3`, `.m4a`, `.wav`, and `.flac` files and cache raw canonical mood scores.
   Without `DIRECTORY`, the configured `library_dir` is used.
-- `moodpl create MOOD [MOOD ...] [-n COUNT] [-o PATH] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the minimum probability of selected moods and emit an M3U8 playlist. With `-o`, track entries are relative to playlist location so playlist and library can move together while keeping their directory layout. Without `-o`, playlist text goes to stdout with absolute track paths.
+- `moodpl create MOOD [MOOD ...] [-n COUNT] [-o PATH] [-t SCORE] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the minimum probability of selected moods and emit an M3U8 playlist. `-n`, `-t`, `-o`, and `-a` default to the config keys `count`, `threshold`, `output`, and `all_moods`. With `-o`, track entries are relative to playlist location so playlist and library can move together while keeping their directory layout. Without `-o` (and with `output` unset), playlist text goes to stdout with absolute track paths. Note: config values have no per-invocation "unset" switch — a configured `count` can only be overridden to another size, not back to "all" (same for `all_moods` vs `-a`), so omit these keys from `config.toml` unless you want them as standing defaults.
 - `moodpl --help` — show CLI help.
 
 Music2Emotion runs in-process using the main Python 3.13 environment and
@@ -42,9 +43,17 @@ non-commercial use unless you obtain separate permission.
 
 Predictions cache under `~/.cache/moodpl/predictions` by default, keyed by the
 resolved library path. The user config file (`~/.config/moodpl/config.toml`,
-created by `moodpl setup`) may set `cache_dir`, `library_dir`, and `mode` (the
-default blend mode: `and`, `or`, or `mean`); CLI flags keep
-precedence over it. Cache records
+created by `moodpl setup`) may set:
+
+- `cache_dir` — cache root (default `~/.cache/moodpl`)
+- `library_dir` — default music library directory
+- `mode` — default blend mode: `and`, `or`, or `mean`
+- `threshold` — default minimum blend score in (0, 1] (default `0.5`)
+- `count` — default playlist size cap (default: all ranked tracks)
+- `output` — default playlist destination; `{moods}` expands to selected labels
+- `all_moods` — offer extended model-only mood tags in the picker by default
+
+CLI flags keep precedence over the config file. Cache records
 invalidate when audio metadata or model version changes. Cache is a local pickle;
 never load or share one from an untrusted source.
 
