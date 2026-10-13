@@ -20,6 +20,7 @@
   fresh cached predictions; it does not run model inference.
 - Keep mood labels mapped to the model's canonical tag names. User-facing
   aliases belong at the CLI boundary.
+- Right now alpha - don't need backwards compat when changing the contract
 
 ## Conventions
 
