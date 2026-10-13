@@ -59,7 +59,7 @@ class LayerConfig:
     threshold: float | _Unset = UNSET
     count: int | None | _Unset = UNSET
     output: str | None | _Unset = UNSET
-    all_moods: bool | _Unset = UNSET
+    show_extended: bool | _Unset = UNSET
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ class Config:
     threshold: float
     count: int | None
     output: str | None
-    all_moods: bool
+    show_extended: bool
 
     @property
     def pred_cache_path(self) -> Path | None:
@@ -93,7 +93,7 @@ class Config:
             threshold=self.threshold,
             count=self.count if self.count is not None else msgspec.UNSET,
             output=self.output if self.output is not None else msgspec.UNSET,
-            all_moods=self.all_moods,
+            show_extended=self.show_extended,
         )
 
 
@@ -105,7 +105,7 @@ DEFAULT_CONFIG = LayerConfig(
     threshold=0.5,
     count=None,
     output=None,
-    all_moods=False,
+    show_extended=False,
 )
 
 
@@ -128,7 +128,7 @@ class RawConfig(msgspec.Struct, forbid_unknown_fields=True, omit_defaults=True):
     threshold: float | msgspec.UnsetType = msgspec.UNSET
     count: int | msgspec.UnsetType = msgspec.UNSET
     output: str | msgspec.UnsetType = msgspec.UNSET
-    all_moods: bool | msgspec.UnsetType = msgspec.UNSET
+    show_extended: bool | msgspec.UnsetType = msgspec.UNSET
 
     @classmethod
     def from_user_config(cls) -> Self:
@@ -168,7 +168,7 @@ def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:
             threshold=_non_empty_or_unset(args.threshold),
             count=_non_empty_or_unset(args.count),
             output=_non_empty_or_unset(args.output),
-            all_moods=True if args.all else UNSET,
+            show_extended=UNSET if not args.show_extended else True,
         )
     if isinstance(args, IndexArgs):
         return LayerConfig(
@@ -180,6 +180,7 @@ def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:
             cache_dir=_path_or_unset(args.cache_dir),
             library_dir=_path_or_unset(args.library),
             blend_mode=_non_empty_or_unset(args.mode),
+            show_extended=UNSET if not args.show_extended else True,
         )
     assert_never(args)
 
@@ -194,7 +195,7 @@ def config_from_user_file() -> LayerConfig:
         threshold=_non_empty_or_unset(raw.threshold),
         count=_non_empty_or_unset(raw.count),
         output=_non_empty_or_unset(raw.output),
-        all_moods=_non_empty_or_unset(raw.all_moods),
+        show_extended=_non_empty_or_unset(raw.show_extended),
     )
 
 

@@ -1,6 +1,7 @@
 """CLI shell for fixed-vocabulary mood playlists."""
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 from time import monotonic
 from typing import NamedTuple, NoReturn
@@ -149,7 +150,7 @@ def moods_list_cmd(_: tap.TypedArgs) -> None:
         if entry.is_core:
             print(f"  {entry.mood}")
     print()
-    print("  Extended model tags (offerable in the dialog via `moodpl create -a`):")
+    print("  Extended model tags (offerable in the dialog via `moodpl create -e` or `moodpl setup`):")
     for entry in MOOD_ENTRIES:
         if not entry.is_core:
             print(f"  {entry.mood}")
@@ -262,11 +263,30 @@ def _setup_library_dir(cfg: Config, *, non_interactive: bool) -> Path:
     _fail("setup", f"directory does not exist: {library}")
 
 
+def _prompt_show_extended(current: bool) -> bool:
+    """Prompt whether the picker offers extended mood tags, defaulting to ``current``; cancel exits."""
+    examples = [entry.mood for entry in MOOD_ENTRIES if not entry.is_core]
+    examples = ", ".join(examples[:4])
+    try:
+        answer = inquirer.confirm(
+            f"Offer extended mood tags (e.g. {examples}, ...)",
+            default=current,
+            style=PICKER_STYLE,
+        ).execute()
+    except (KeyboardInterrupt, EOFError):
+        answer = None
+    if not isinstance(answer, bool):
+        print("Cancelled.")
+        raise SystemExit(0)
+    return answer
+
+
 def setup_cmd(args: SetupArgs) -> None:
     non_interactive = not (sys.stdin.isatty() and sys.stdout.isatty())
     arg_config = config_from_args(args)
     cache_dir = args.cache_dir
     mode = args.mode
+    show_extended = args.show_extended
     del args  # remaining fields resolve through config/prompts
     try:
         user_cfg = config_from_user_file()
@@ -287,6 +307,7 @@ def setup_cmd(args: SetupArgs) -> None:
 
         if not non_interactive:
             mode = _prompt_blend_mode(pre_interactive_cfg.blend_mode)
+            show_extended = _prompt_show_extended(show_extended or pre_interactive_cfg.show_extended)
 
         cfg_path = config_path()
         if cfg_path.is_file():
@@ -302,8 +323,11 @@ def setup_cmd(args: SetupArgs) -> None:
             library=str(library),
             cache_dir=cache_dir,
             mode=mode,
+            show_extended=show_extended,
         )
         cfg = resolve_configs(config_from_args(final_args), user_cfg)
+        if not non_interactive:
+            cfg = replace(cfg, show_extended=show_extended)
         payload = dump_raw_config(cfg, cfg_path)
     except (OSError, TypeError, ValueError) as error:
         print(f"moodpl setup: {error}", file=sys.stderr)
@@ -315,12 +339,12 @@ def setup_cmd(args: SetupArgs) -> None:
     print("Next: moodpl index")
 
 
-def run_mood_picker(*, show_all: bool, default_mode: BlendMode) -> MoodSelection | None:
+def run_mood_picker(*, show_extended: bool, default_mode: BlendMode) -> MoodSelection | None:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         print("moodpl create: pass mood labels when running non-interactively", file=sys.stderr)
         raise SystemExit(2)
 
-    shown = MOOD_ENTRIES if show_all else [entry for entry in MOOD_ENTRIES if entry.is_core]
+    shown = MOOD_ENTRIES if show_extended else [entry for entry in MOOD_ENTRIES if entry.is_core]
     entries = [(entry.mood, entry.color) for entry in shown]
     return ask_moods_with_mode(entries, message="Choose moods to blend", default_mode=default_mode)
 
@@ -363,7 +387,7 @@ def create_cmd(args: CreateArgs) -> None:
 
     mode = cfg.blend_mode
     if len(moods) == 0:
-        picked = run_mood_picker(show_all=cfg.all_moods, default_mode=mode)
+        picked = run_mood_picker(show_extended=cfg.show_extended, default_mode=mode)
         if picked is None:
             print("No moods selected; cancelled.")
             return

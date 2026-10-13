@@ -21,11 +21,12 @@ class IndexArgs(tap.TypedArgs):
 
 class CreateArgs(tap.TypedArgs):
     moods: list[MoodName] = tap.arg(positional=True, nargs="*", help="Mood labels to blend")
-    all: bool = tap.arg(
-        "-a",
-        "--all",
+    show_extended: bool = tap.arg(
+        "-e",
+        "--extended",
         default=False,
-        help="Offer extended model-only mood tags in the dialog (default: config `all_moods`)",
+        help="Offer extended model-only mood tags in the dialog, e.g. sport, film, game, trailer "
+        "(default: config `show_extended`)",
         auto_default_help=False,
     )
     mode: BlendMode | None = tap.arg(
@@ -64,4 +65,10 @@ class SetupArgs(tap.TypedArgs):
         "--mode",
         default=None,
         help="Blend mode to configure (and, or, mean); prompted interactively when omitted",
+    )
+    show_extended: bool = tap.arg(
+        "-e",
+        "--extended",
+        default=False,
+        help="Offer extended mood tags in the dialog, e.g. sport, film, game, trailer",
     )

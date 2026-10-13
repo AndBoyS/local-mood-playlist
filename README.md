@@ -31,7 +31,7 @@ requires explicit labels.
 - `moodpl index [DIRECTORY] [--cache PATH] [--force]` — predict missing or changed
   `.mp3`, `.m4a`, `.wav`, and `.flac` files and cache raw canonical mood scores.
   Without `DIRECTORY`, the configured `library_dir` is used.
-- `moodpl create MOOD [MOOD ...] [-n COUNT] [-o PATH] [-t SCORE] [-e] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the minimum probability of selected moods and emit an M3U8 playlist. `-n`, `-t`, `-o`, and `-e` default to the config keys `count`, `threshold`, `output`, and `extended_moods`. `-e` also offers extended model-only tags (e.g. `children`, `sport`, `film`, `game`, `trailer`) in the picker. With `-o`, track entries are relative to playlist location so playlist and library can move together while keeping their directory layout. Without `-o` (and with `output` unset), playlist text goes to stdout with absolute track paths. Note: config values have no per-invocation "unset" switch — a configured `count` can only be overridden to another size, not back to "all" (same for `extended_moods` vs `-e`), so omit these keys from `config.toml` unless you want them as standing defaults. Old configs reading `all_moods` still work, but setup now writes `extended_moods`.
+- `moodpl create MOOD [MOOD ...] [-n COUNT] [-o PATH] [-t SCORE] [-e] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the minimum probability of selected moods and emit an M3U8 playlist. `-n`, `-t`, `-o`, and `-e` default to the config keys `count`, `threshold`, `output`, and `show_extended`. `-e` also offers extended model-only tags (e.g. `children`, `sport`, `film`, `game`, `trailer`) in the picker. With `-o`, track entries are relative to playlist location so playlist and library can move together while keeping their directory layout. Without `-o` (and with `output` unset), playlist text goes to stdout with absolute track paths. Note: config values have no per-invocation "unset" switch — a configured `count` can only be overridden to another size, not back to "all" (same for `show_extended` vs `-e`), so omit these keys from `config.toml` unless you want them as standing defaults.
 - `moodpl --help` — show CLI help.
 
 Music2Emotion runs in-process using the main Python 3.13 environment and
@@ -51,8 +51,7 @@ created by `moodpl setup`) may set:
 - `threshold` — default minimum blend score in (0, 1] (default `0.5`)
 - `count` — default playlist size cap (default: all ranked tracks)
 - `output` — default playlist destination; `{moods}` expands to selected labels
-- `extended_moods` — offer extended model-only mood tags in the picker by default
-  (legacy key `all_moods` is still read)
+- `show_extended` — offer extended model-only mood tags in the picker by default
 
 CLI flags keep precedence over the config file. Cache records
 invalidate when audio metadata or model version changes. Cache is a local pickle;
