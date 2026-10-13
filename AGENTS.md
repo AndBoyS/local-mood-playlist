@@ -14,7 +14,7 @@
   minimum probability of selected moods and writes M3U8 output to `--output` or
   stdout. With a cache, `--dry-run` previews ranked tracks without writing;
   without a cache, it previews the request only. With no labels in a terminal,
-  Questionary opens a flat multi-select picker.
+  InquirerPy opens a multi-select picker with a blend-mode toggle key.
 - `moodpl index DIRECTORY` runs vendored Music2Emotion in-process in the main
   Python 3.13 environment and caches canonical tag scores. `moodpl create` reads
   fresh cached predictions; it does not run model inference.
