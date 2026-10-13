@@ -155,6 +155,7 @@ def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:
         return LayerConfig(
             cache_dir=_path_or_unset(args.cache_dir),
             library_dir=_path_or_unset(args.library),
+            blend_mode=_non_empty_or_unset(args.mode),
         )
     assert_never(args)
 

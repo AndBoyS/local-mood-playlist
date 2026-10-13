@@ -72,6 +72,8 @@ picker's ``m`` key: ``and`` keeps tracks matching every selected mood
 averages the scores.
 """
 
+BLEND_MODES: Final[tuple[BlendMode, ...]] = get_args(BlendMode)
+
 
 class BlendModeDetail(NamedTuple):
     """User-facing wording describing a blend mode's score and threshold."""

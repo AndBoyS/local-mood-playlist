@@ -38,3 +38,9 @@ class CreateArgs(tap.TypedArgs):
 class SetupArgs(tap.TypedArgs):
     library: str | None = tap.arg(default=None, help="Music library directory to configure")
     cache_dir: str | None = tap.arg(default=None, help="Cache root directory to configure")
+    mode: BlendMode | None = tap.arg(
+        "-m",
+        "--mode",
+        default=None,
+        help="Blend mode to configure (and, or, mean); prompted interactively when omitted",
+    )

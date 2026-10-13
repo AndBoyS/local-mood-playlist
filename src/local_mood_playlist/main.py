@@ -7,6 +7,7 @@ from typing import NamedTuple, NoReturn
 
 import typed_argparse as tap
 from InquirerPy import inquirer
+from InquirerPy.base.control import Choice
 
 from local_mood_playlist.args import CreateArgs, IndexArgs, SetupArgs
 from local_mood_playlist.config import (
@@ -23,7 +24,7 @@ from local_mood_playlist.indexing import (
     index_library,
 )
 from local_mood_playlist.mood_picker import PICKER_STYLE, MoodSelection, ask_moods_with_mode
-from local_mood_playlist.moods import BLEND_MODE_DETAIL, BlendMode, MoodName
+from local_mood_playlist.moods import BLEND_MODE_DETAIL, BLEND_MODES, BlendMode, MoodName
 from local_mood_playlist.music2emotion import MODEL_VERSION
 from local_mood_playlist.playlists import rank_cached_tracks, render_m3u8
 from local_mood_playlist.predictions import PredictionCache
@@ -223,13 +224,31 @@ def _prompt_library_dir(cmd: str, *, fallback: Path | None = None) -> Path:
         print(f"moodpl {cmd}: directory does not exist: {candidate}", file=sys.stderr)
 
 
+def _prompt_blend_mode(current: BlendMode) -> BlendMode:
+    """Prompt for the blend mode, defaulting to ``current``; cancel exits."""
+    choices = [Choice(value=mode, name=f"{mode} — {BLEND_MODE_DETAIL[mode].matching}") for mode in BLEND_MODES]
+    try:
+        answer = inquirer.select(
+            "Blend mode",
+            choices=choices,
+            default=current,
+            style=PICKER_STYLE,
+        ).execute()
+    except (KeyboardInterrupt, EOFError):
+        answer = None
+    if answer not in BLEND_MODES:
+        print("Cancelled.")
+        raise SystemExit(0)
+    return answer
+
+
 def _setup_library_dir(cfg: Config, *, non_interactive: bool) -> Path:
-    """Return the library directory for setup; interactive setup may prompt, non-interactive must fail."""
+    """Return the library directory for setup; interactive setup prompts with the current value prefilled."""
     library = cfg.library_dir
-    if library is not None and library.is_dir():
-        return library
     if not non_interactive:
         return _prompt_library_dir("setup", fallback=library)
+    if library is not None and library.is_dir():
+        return library
     if library is None:
         _fail("setup", "no library directory: pass --library (terminal not detected)")
     _fail("setup", f"directory does not exist: {library}")
@@ -242,7 +261,7 @@ def setup_cmd(args: SetupArgs) -> None:
         pre_interactive_cfg = resolve_configs(config_from_args(args), user_cfg)
         library = _setup_library_dir(pre_interactive_cfg, non_interactive=non_interactive)
 
-        prompt_cache_dir: str | None = None
+        prompt_cache_dir = args.cache_dir
         if args.cache_dir is None and not non_interactive:
             answer = _prompt_path("Cache directory", default=str(pre_interactive_cfg.cache_dir))
             prompt_cache_dir = answer if answer is not None and len(answer.strip()) > 0 else None
@@ -250,6 +269,10 @@ def setup_cmd(args: SetupArgs) -> None:
         audio_count = sum(path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES for path in library.rglob("*"))
         if audio_count == 0:
             print(f"warning: no supported audio files found yet under {library}", file=sys.stderr)
+
+        prompt_mode = args.mode
+        if not non_interactive:
+            prompt_mode = _prompt_blend_mode(pre_interactive_cfg.blend_mode)
 
         cfg_path = config_path()
         if cfg_path.is_file():
@@ -262,7 +285,9 @@ def setup_cmd(args: SetupArgs) -> None:
                 return
 
         final_args = SetupArgs(
-            library=str(library), cache_dir=prompt_cache_dir if prompt_cache_dir is not None else args.cache_dir
+            library=str(library),
+            cache_dir=prompt_cache_dir,
+            mode=prompt_mode,
         )
         cfg = resolve_configs(config_from_args(final_args), user_cfg)
         payload = dump_raw_config(cfg, cfg_path)
@@ -387,7 +412,7 @@ def main() -> None:
                 tap.SubParser("moods", tap.TypedArgs, help="List selectable mood labels"),
                 tap.SubParser("create", CreateArgs, help="Create a playlist from selected mood tags"),
                 tap.SubParser("index", IndexArgs, help="Analyze library tracks and cache mood predictions"),
-                tap.SubParser("setup", SetupArgs, help="Configure the library directory (and optional cache dir)"),
+                tap.SubParser("setup", SetupArgs, help="Configure the library directory, cache dir, and blend mode"),
                 description="Create local playlists from a fixed set of mood tags.",
             ),
             prog="moodpl",
