@@ -130,8 +130,11 @@ def _prompt_path(question: str, *, default: str | None = None, only_directories:
 
 
 def require_library_dir(cfg: Config, *, command: str) -> Path:
+    """Return the configured library directory, failing when missing or nonexistent."""
     if cfg.library_dir is None:
         _fail(command, "no library directory: pass one or run `moodpl setup`")
+    if not cfg.library_dir.is_dir():
+        _fail(command, f"library directory does not exist: {cfg.library_dir}")
     return cfg.library_dir
 
 
@@ -333,10 +336,9 @@ def create_cmd(args: CreateArgs) -> None:
     if output_arg is not None and "{moods}" in output_arg:
         output_arg = output_arg.replace("{moods}", "-".join(moods))
 
-    try:
-        cache_path = cfg.pred_cache_path
-    except OSError as error:
-        _fail("create", f"cannot locate library directory: {error}")
+    if cfg.cache_path is None and cfg.library_dir is not None:
+        _ = require_library_dir(cfg, command="create")
+    cache_path = cfg.pred_cache_path
 
     if cache_path is None and not args.dry_run:
         _fail("create", "pass --cache or --library (or run `moodpl setup`) to use indexed predictions")

@@ -69,12 +69,12 @@ class Config:
 
     @property
     def pred_cache_path(self) -> Path | None:
+        """Explicit cache path; otherwise a predictions path keyed by the configured library path."""
         if self.cache_path is not None:
             return self.cache_path
         if self.library_dir is None:
             return None
-        resolved_library = self.library_dir.resolve(strict=True)
-        library_id = hashlib.sha256(str(resolved_library).encode("utf-8")).hexdigest()[:20]
+        library_id = hashlib.sha256(str(self.library_dir.resolve()).encode("utf-8")).hexdigest()[:20]
         return self.cache_dir / "predictions" / f"predictions-{library_id}.pkl"
 
     def to_raw(self) -> RawConfig:
