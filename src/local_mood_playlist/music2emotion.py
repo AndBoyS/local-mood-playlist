@@ -10,6 +10,7 @@ from typing import Protocol, TypedDict, cast
 
 from local_mood_playlist.assets import decompress_mert_weights, ensure_bundles, mert_cache_dir
 from local_mood_playlist.moods import MOOD_NAMES, MoodName
+from local_mood_playlist.paths import ResolvedPath
 from local_mood_playlist.predictions import TrackPrediction
 
 MODEL_VERSION = "m2e-c5f7984-j95926289-btc11c6ed-tags-c53cee67-mert12af15fe-patch2-plainnames"
@@ -59,7 +60,7 @@ def to_cli_moods(canonical_tag: str) -> MoodName:
     return name
 
 
-def _load_model(cache_root: Path) -> _Music2EmotionModel:
+def _load_model(cache_root: ResolvedPath) -> _Music2EmotionModel:
     bundles = ensure_bundles(cache_root)
 
     from local_mood_playlist.vendor.music2emo import Music2emo  # noqa: PLC0415
@@ -83,15 +84,15 @@ def _to_prediction(result: ModelOutput) -> TrackPrediction:
 class Music2Emotion:
     """Music2Emotion model wrapper."""
 
-    def __init__(self, cache_root: Path) -> None:
+    def __init__(self, cache_root: ResolvedPath) -> None:
         self._model = _load_model(cache_root)
 
-    def predict(self, audio_path: Path) -> TrackPrediction:
+    def predict(self, audio_path: ResolvedPath) -> TrackPrediction:
         return self.predict_prepared(self.prepare(audio_path))
 
-    def prepare(self, audio_path: Path) -> PreparedTrack:
+    def prepare(self, audio_path: ResolvedPath) -> PreparedTrack:
         """CPU-only staging (decode, resample, CQT); safe to run off the model thread."""
-        return self._model.prepare(audio_path.expanduser().resolve(strict=True))
+        return self._model.prepare(audio_path.path)
 
     def predict_prepared(self, prepared: PreparedTrack) -> TrackPrediction:
         """GPU inference for a track staged by :meth:`prepare`."""
@@ -99,8 +100,8 @@ class Music2Emotion:
 
     @contextmanager
     def prepare_pipeline(
-        self, audio_paths: Sequence[Path]
-    ) -> Generator[Iterator[tuple[Path, PreparedTrack | Exception]]]:
+        self, audio_paths: Sequence[ResolvedPath]
+    ) -> Generator[Iterator[tuple[ResolvedPath, PreparedTrack | Exception]]]:
         """Stage tracks one ahead so CPU staging overlaps model inference.
 
         Use as ``with model.prepare_pipeline(paths) as pipeline:`` and iterate
@@ -111,19 +112,19 @@ class Music2Emotion:
         """
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="moodpl-prepare")
 
-        def stage(audio_path: Path) -> PreparedTrack:
+        def stage(audio_path: ResolvedPath) -> PreparedTrack:
             return self.prepare(audio_path)
 
-        def resolved(entry: tuple[Path, Future[PreparedTrack]]) -> tuple[Path, PreparedTrack | Exception]:
+        def resolved(entry: tuple[ResolvedPath, Future[PreparedTrack]]) -> tuple[ResolvedPath, PreparedTrack | Exception]:
             audio_path, future = entry
             try:
                 return audio_path, future.result()
             except Exception as error:  # noqa: BLE001 - surfaced per track, not per run
                 return audio_path, error
 
-        def staged() -> Generator[tuple[Path, PreparedTrack | Exception]]:
+        def staged() -> Generator[tuple[ResolvedPath, PreparedTrack | Exception]]:
             try:
-                upcoming: tuple[Path, Future[PreparedTrack]] | None = None
+                upcoming: tuple[ResolvedPath, Future[PreparedTrack]] | None = None
                 for audio_path in audio_paths:
                     current = (audio_path, executor.submit(stage, audio_path))
                     if upcoming is not None:

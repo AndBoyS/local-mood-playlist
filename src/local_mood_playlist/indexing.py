@@ -2,20 +2,20 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
 from local_mood_playlist.music2emotion import MODEL_VERSION, Music2Emotion
+from local_mood_playlist.paths import ResolvedPath
 from local_mood_playlist.predictions import PredictionCache
 
 AUDIO_SUFFIXES: tuple[str, ...] = (".flac", ".m4a", ".mp3", ".wav")
 _SAVE_EVERY = 25
-ProgressUpdate = tuple[int, int, Path | None]
+ProgressUpdate = tuple[int, int, ResolvedPath | None]
 ProgressCallback = Callable[[ProgressUpdate], None]
 
 
 @dataclass(frozen=True)
 class IndexFailure:
-    audio_path: Path
+    audio_path: ResolvedPath
     error: str
 
 
@@ -25,7 +25,7 @@ class IndexSummary:
     predictions_reused: int
     predictions_computed: int
     failures: tuple[IndexFailure, ...]
-    cache_path: Path
+    cache_path: ResolvedPath
 
     @property
     def predictions_failed(self) -> int:
@@ -33,23 +33,31 @@ class IndexSummary:
 
 
 def index_library(
-    library_path: Path,
+    library_path: ResolvedPath,
     *,
-    cache_path: Path,
-    cache_root: Path,
+    cache_path: ResolvedPath,
+    cache_root: ResolvedPath,
     force: bool = False,
     on_progress: ProgressCallback | None = None,
 ) -> IndexSummary:
-    """Predict uncached or changed audio files; store raw scores for later ranking."""
-    root = library_path.expanduser().resolve(strict=True)
-    if not root.is_dir():
-        raise ValueError(f"music library path is not a directory: {root}")
-    audio_files = sorted(path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES)
+    """Predict uncached or changed audio files; store raw scores for later ranking.
+
+    Raises ValueError when ``library_path`` is not a directory.
+    """
+    if not library_path.path.is_dir():
+        raise ValueError(f"music library path is not a directory: {library_path}")
+    audio_files = sorted(
+        set(
+            ResolvedPath(path)
+            for path in library_path.path.rglob("*")
+            if path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES
+        )
+    )
     if len(audio_files) == 0:
-        raise ValueError(f"no supported audio files found in {root}")
+        raise ValueError(f"no supported audio files found in {library_path}")
 
     cache = PredictionCache(cache_path, model_version=MODEL_VERSION)
-    pending: list[Path] = []
+    pending: list[ResolvedPath] = []
     reused = 0
     for audio_file in audio_files:
         if not force and cache.get(audio_file) is not None:

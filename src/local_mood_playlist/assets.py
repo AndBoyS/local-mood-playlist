@@ -30,6 +30,7 @@ from typing import Literal
 import zstandard as zstd
 
 from local_mood_playlist.filesystem_utils import open_atomic
+from local_mood_playlist.paths import ResolvedPath
 
 BundleName = Literal["music2emo", "mert"]
 
@@ -57,12 +58,12 @@ BUNDLE_FILES: dict[BundleName, list[str]] = {
 }
 
 
-def asset_cache_dir(cache_root: Path) -> Path:
+def asset_cache_dir(cache_root: ResolvedPath) -> Path:
     """Asset bundle root for the pinned revision, under the given cache root."""
-    return cache_root / "assets" / VENDORED_REVISION
+    return cache_root.path / "assets" / VENDORED_REVISION
 
 
-def mert_cache_dir(cache_root: Path) -> Path:
+def mert_cache_dir(cache_root: ResolvedPath) -> Path:
     """MERT bundle directory, under :func:`asset_cache_dir`."""
     return asset_cache_dir(cache_root) / "mert"
 
@@ -103,7 +104,7 @@ def _is_bundle_intact(root: Path, *, rel_paths: Iterable[str], pin: str) -> bool
     return dir_digest(root, rel_paths) == pin
 
 
-def _ensure_bundle(name: BundleName, cache_root: Path) -> dict[str, Path]:
+def _ensure_bundle(name: BundleName, cache_root: ResolvedPath) -> dict[str, Path]:
     """Verify one bundle; fetch any missing file; validate the whole dir digest."""
     rel_paths = BUNDLE_FILES[name]
     pin = BUNDLE_SHA256S[name]
@@ -120,7 +121,7 @@ def _ensure_bundle(name: BundleName, cache_root: Path) -> dict[str, Path]:
     return paths
 
 
-def ensure_bundles(cache_root: Path) -> dict[str, Path]:
+def ensure_bundles(cache_root: ResolvedPath) -> dict[str, Path]:
     """Verify all bundles; fetch any missing file; return one cache path per file."""
     paths: dict[str, Path] = {}
     for name in BUNDLE_FILES:

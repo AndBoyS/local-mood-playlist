@@ -11,15 +11,15 @@ from __future__ import annotations
 import pickle
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Annotated, TypedDict
 
 import msgspec
 
 from local_mood_playlist.filesystem_utils import open_atomic
 from local_mood_playlist.moods import MoodName
+from local_mood_playlist.paths import ResolvedPath
 
-_CACHE_SCHEMA_VERSION = 1
+_CACHE_SCHEMA_VERSION = 2
 
 MoodScore = Annotated[float, msgspec.Meta(ge=0.0, le=1.0)]
 
@@ -57,48 +57,50 @@ class _CacheEntry:
 class _CachePayload(TypedDict):
     schema_version: int
     model_version: str
-    entries: dict[Path, _CacheEntry]
+    entries: dict[ResolvedPath, _CacheEntry]
 
 
 class PredictionCache:
     """Pickle-backed cache keyed by canonical path and audio-file metadata.
 
+    Audio keys are :class:`ResolvedPath`, so identity is stable across skips,
+    symlinks, and trailing ``.`` — no caller can slip in a non-canonical key.
     Only load cache files created and controlled by this application: pickle is
     executable serialization and must not be used with untrusted files.
     """
 
-    def __init__(self, path: Path, model_version: str) -> None:
+    def __init__(self, path: ResolvedPath, model_version: str) -> None:
         if len(model_version.strip()) == 0:
             raise ValueError("model_version must not be empty")
-        self.path = path.expanduser()
+        self.path = path
         self.model_version = model_version
         self._entries = self._load()
 
-    def get(self, audio_path: Path) -> TrackPrediction | None:
+    def get(self, audio_path: ResolvedPath) -> TrackPrediction | None:
         """Return fresh prediction for audio_path, or None on cache miss/staleness."""
         fingerprint = self._fingerprint(audio_path)
         if fingerprint is None:
             return None
-        canonical_path, size_bytes, modified_ns = fingerprint
-        entry = self._entries.get(canonical_path)
+        size_bytes, modified_ns = fingerprint
+        entry = self._entries.get(audio_path)
         if entry is None or entry.size_bytes != size_bytes or entry.modified_ns != modified_ns:
             return None
         return entry.prediction
 
-    def iter_predictions(self) -> Iterator[tuple[Path, TrackPrediction]]:
+    def iter_predictions(self) -> Iterator[tuple[ResolvedPath, TrackPrediction]]:
         """Yield fresh cached predictions with canonical audio paths."""
         for audio_path in self._entries:
             prediction = self.get(audio_path)
             if prediction is not None:
                 yield audio_path, prediction
 
-    def put(self, audio_path: Path, prediction: TrackPrediction) -> None:
+    def put(self, audio_path: ResolvedPath, prediction: TrackPrediction) -> None:
         """Remember prediction for current audio-file version; call save() to persist."""
         fingerprint = self._fingerprint(audio_path)
         if fingerprint is None:
-            raise FileNotFoundError(audio_path)
-        canonical_path, size_bytes, modified_ns = fingerprint
-        self._entries[canonical_path] = _CacheEntry(size_bytes, modified_ns, prediction)
+            raise FileNotFoundError(audio_path.path)
+        size_bytes, modified_ns = fingerprint
+        self._entries[audio_path] = _CacheEntry(size_bytes, modified_ns, prediction)
 
     def save(self) -> None:
         """Atomically write cache; batch put() calls before saving to avoid repeated I/O."""
@@ -108,26 +110,26 @@ class PredictionCache:
             "entries": self._entries,
         }
 
-        with open_atomic(self.path) as file:
+        with open_atomic(self.path.path) as file:
             pickle.dump(payload, file, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def _fingerprint(self, audio_path: Path) -> tuple[Path, int, int] | None:
+    def _fingerprint(self, audio_path: ResolvedPath) -> tuple[int, int] | None:
+        """Return (size, mtime) for the canonical audio path, or None if it vanished."""
         try:
-            canonical_path = audio_path.expanduser().resolve(strict=True)
-            file_stat = canonical_path.stat()
+            file_stat = audio_path.path.stat()
         except FileNotFoundError:
             return None
-        if not canonical_path.is_file():
+        if not audio_path.path.is_file():
             raise ValueError(f"audio path is not a file: {audio_path}")
-        if canonical_path == self.path.resolve():
+        if audio_path == self.path:
             raise ValueError("cache path must not point to an audio file")
-        return canonical_path, file_stat.st_size, file_stat.st_mtime_ns
+        return file_stat.st_size, file_stat.st_mtime_ns
 
-    def _load(self) -> dict[Path, _CacheEntry]:
-        if not self.path.is_file():
+    def _load(self) -> dict[ResolvedPath, _CacheEntry]:
+        if not self.path.path.is_file():
             return {}
         try:
-            with self.path.open("rb") as cache_file:
+            with self.path.path.open("rb") as cache_file:
                 payload: _CachePayload = pickle.load(cache_file)
             if payload["schema_version"] != _CACHE_SCHEMA_VERSION:
                 return {}

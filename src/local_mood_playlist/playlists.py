@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import contextlib
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from local_mood_playlist.moods import BlendMode, MoodName
+from local_mood_playlist.paths import RelativePath, ResolvedPath
 from local_mood_playlist.predictions import PredictionCache
 
 
 @dataclass(frozen=True)
 class RankedTrack:
-    audio_path: Path
+    audio_path: ResolvedPath
     score: float
 
 
@@ -56,29 +58,40 @@ def rank_cached_tracks(
         score = blend_scores([prediction.mood_scores[mood] for mood in moods], mode)
         ranked.append(RankedTrack(audio_path, score))
 
-    ranked.sort(key=lambda track: (-track.score, track.audio_path.as_posix()))
+    ranked.sort(key=lambda track: (-track.score, track.audio_path.path.as_posix()))
     ranked = [track for track in ranked if track.score >= min_score]
     if limit is None:
         return ranked
     return ranked[:limit]
 
 
-def render_m3u8(tracks: list[RankedTrack], *, output_path: Path | None = None) -> str:
-    """Render extended M3U text, relative to output playlist when known."""
+def render_m3u8(tracks: list[RankedTrack], *, output_path: ResolvedPath | None = None) -> str:
+    """Render extended M3U text with track entries relative to the playlist's own directory.
+
+    Relative entries keep the playlist playing on another device where the
+    playlist and the library keep the same layout; the playlist can live
+    anywhere inside or beside the library (at the library root itself the
+    entries are simply ``Album/song.mp3``). Without an output path (rendering
+    to stdout) the entries cannot be positional and stay absolute.
+    """
     lines = ["#EXTM3U"]
     for track in tracks:
-        title = f"{track.audio_path.parent.name} - {track.audio_path.stem}"
+        audio_path = track.audio_path.path
+        title = f"{audio_path.parent.name} - {audio_path.stem}"
         title = title.replace("\r", " ").replace("\n", " ")
-        audio_path = track.audio_path.expanduser().resolve()
-        if output_path is None:
-            playlist_entry = audio_path.as_posix()
-        else:
-            try:
-                playlist_entry = audio_path.relative_to(
-                    output_path.expanduser().resolve().parent,
-                    walk_up=True,
-                ).as_posix()
-            except ValueError:
-                playlist_entry = audio_path.as_posix()
-        lines.extend((f"#EXTINF:-1,{title}", playlist_entry))
+        lines.extend((f"#EXTINF:-1,{title}", _playlist_entry(audio_path, output_path).as_posix()))
     return "\n".join(lines) + "\n"
+
+
+def _playlist_entry(audio_path: Path, output_path: ResolvedPath | None) -> RelativePath | Path:
+    """Return one track path relative to the playlist directory, or absolute.
+
+    Only rendering to stdout (no output path) and Windows-cross-drive audio
+    paths produce absolute entries; ``walk_up`` entries stay relative for any
+    shared layout between playlist and library.
+    """
+    if output_path is None:
+        return audio_path
+    with contextlib.suppress(ValueError):
+        return RelativePath(audio_path.relative_to(output_path.path.parent, walk_up=True))
+    return audio_path

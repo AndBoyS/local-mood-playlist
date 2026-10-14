@@ -23,6 +23,7 @@ import msgspec
 
 from local_mood_playlist.args import CreateArgs, IndexArgs, SetupArgs
 from local_mood_playlist.moods import BlendMode
+from local_mood_playlist.paths import ResolvedPath
 
 
 def _xdg_home(var: str, fallback: str) -> Path:
@@ -31,9 +32,9 @@ def _xdg_home(var: str, fallback: str) -> Path:
     return home if home.is_absolute() else Path.home() / fallback
 
 
-def default_cache_dir() -> Path:
+def default_cache_dir() -> ResolvedPath:
     """Return the user-level default cache root: ``$XDG_CACHE_HOME/moodpl`` or ``~/.cache/moodpl``."""
-    return _xdg_home("XDG_CACHE_HOME", ".cache") / "moodpl"
+    return ResolvedPath(_xdg_home("XDG_CACHE_HOME", ".cache") / "moodpl")
 
 
 class _Unset:
@@ -52,9 +53,9 @@ UNSET = _Unset()
 class LayerConfig:
     """Values set by one source."""
 
-    cache_dir: Path | _Unset = UNSET
-    library_dir: Path | None | _Unset = UNSET
-    cache_path: Path | None | _Unset = UNSET
+    cache_dir: ResolvedPath | _Unset = UNSET
+    library_dir: ResolvedPath | None | _Unset = UNSET
+    cache_path: ResolvedPath | None | _Unset = UNSET
     blend_mode: BlendMode | _Unset = UNSET
     threshold: float | _Unset = UNSET
     count: int | None | _Unset = UNSET
@@ -66,9 +67,9 @@ class LayerConfig:
 class Config:
     """Fully resolved config layers merged by :func:`resolve_configs`."""
 
-    cache_dir: Path
-    library_dir: Path | None
-    cache_path: Path | None
+    cache_dir: ResolvedPath
+    library_dir: ResolvedPath | None
+    cache_path: ResolvedPath | None
     blend_mode: BlendMode
     threshold: float
     count: int | None
@@ -76,14 +77,14 @@ class Config:
     show_extended: bool
 
     @property
-    def pred_cache_path(self) -> Path | None:
+    def pred_cache_path(self) -> ResolvedPath | None:
         """Explicit cache path; otherwise a predictions path keyed by the configured library path."""
         if self.cache_path is not None:
             return self.cache_path
         if self.library_dir is None:
             return None
-        library_id = hashlib.sha256(str(self.library_dir.resolve()).encode("utf-8")).hexdigest()[:20]
-        return self.cache_dir / "predictions" / f"predictions-{library_id}.pkl"
+        library_id = hashlib.sha256(str(self.library_dir.path).encode("utf-8")).hexdigest()[:20]
+        return ResolvedPath(self.cache_dir.path / "predictions" / f"predictions-{library_id}.pkl")
 
     def to_raw(self) -> RawConfig:
         return RawConfig(
@@ -153,9 +154,12 @@ def _non_empty_or_unset[T](value: T | None | msgspec.UnsetType | _Unset) -> T | 
     return value
 
 
-def _path_or_unset(value: str | Path | None | msgspec.UnsetType | _Unset) -> Path | _Unset:
+def _path_or_unset(value: str | Path | None | msgspec.UnsetType | _Unset) -> ResolvedPath | _Unset:
+    """Resolve a path config value; absent or empty becomes UNSET."""
     kept = _non_empty_or_unset(value)
-    return UNSET if isinstance(kept, _Unset) else Path(kept).expanduser().resolve()
+    if isinstance(kept, _Unset):
+        return UNSET
+    return ResolvedPath(Path(kept))
 
 
 def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:

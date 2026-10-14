@@ -33,6 +33,7 @@ from local_mood_playlist.mood_picker import (
 )
 from local_mood_playlist.moods import BLEND_MODE_DETAIL, BLEND_MODES, BlendMode, MoodName
 from local_mood_playlist.music2emotion import MODEL_VERSION
+from local_mood_playlist.paths import ResolvedPath
 from local_mood_playlist.playlists import rank_cached_tracks, render_m3u8
 from local_mood_playlist.predictions import PredictionCache
 
@@ -131,12 +132,14 @@ def _confirm(question: str) -> bool:
     return answer
 
 
-def require_library_dir(cfg: Config, *, command: str) -> Path:
-    """Return the configured library directory, failing when missing or nonexistent."""
+def require_library_dir(cfg: Config, *, command: str) -> ResolvedPath:
+    """Return library dir / informational errors for different kinds of library problems."""
     if cfg.library_dir is None:
         _fail(command, "no library directory: pass one or run `moodpl setup`")
-    if not cfg.library_dir.is_dir():
+    if not cfg.library_dir.path.exists():
         _fail(command, f"library directory does not exist: {cfg.library_dir}")
+    if not cfg.library_dir.path.is_dir():
+        _fail(command, f"not a directory: {cfg.library_dir}")
     return cfg.library_dir
 
 
@@ -161,10 +164,10 @@ def run_mood_picker(*, show_extended: bool, default_mode: BlendMode) -> MoodSele
     return ask_moods_with_mode(entries, message="Choose moods to blend", default_mode=default_mode)
 
 
-def _validate_playlist_output_path(output_path: Path, cache_path: Path | None) -> None:
-    if output_path.suffix.lower() != ".m3u8":
+def _validate_playlist_output_path(output_path: ResolvedPath, cache_path: ResolvedPath | None) -> None:
+    if output_path.path.suffix.lower() != ".m3u8":
         raise ValueError("playlist output path must end in .m3u8")
-    if cache_path is not None and output_path.resolve() == cache_path.resolve():
+    if cache_path is not None and output_path == cache_path:
         raise ValueError("playlist output path must not overwrite prediction cache")
 
 
@@ -203,7 +206,7 @@ def create_cmd(args: CreateArgs) -> None:
     if cache_path is None and not dry_run:
         _fail("create", "pass --cache or --library (or run `moodpl setup`) to use indexed predictions")
 
-    if dry_run and (cache_path is None or not cache_path.is_file()):
+    if dry_run and (cache_path is None or not cache_path.path.is_file()):
         _print_request_preview(moods, mode=mode, threshold=cfg.threshold, count=cfg.count, output_arg=output_arg)
         return
 
@@ -213,7 +216,7 @@ def create_cmd(args: CreateArgs) -> None:
     try:
         cache = PredictionCache(cache_path, model_version=MODEL_VERSION)
         ranked = rank_cached_tracks(cache, moods=moods, mode=mode, limit=cfg.count, min_score=cfg.threshold)
-        output_path = Path(output_arg).expanduser() if output_arg is not None else None
+        output_path = ResolvedPath(Path(output_arg)) if output_arg is not None else None
         if output_path is not None:
             _validate_playlist_output_path(output_path, cache.path)
 
@@ -232,8 +235,8 @@ def create_cmd(args: CreateArgs) -> None:
         if output_path is None:
             _ = sys.stdout.write(playlist)
         else:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            _ = output_path.write_text(playlist, encoding="utf-8")
+            output_path.path.parent.mkdir(parents=True, exist_ok=True)
+            _ = output_path.path.write_text(playlist, encoding="utf-8")
             print(f"Created {len(ranked)}-track playlist: {output_path}", file=sys.stderr)
     except (OSError, TypeError, ValueError, RuntimeError) as error:
         print(f"moodpl create: {error}", file=sys.stderr)
@@ -275,7 +278,7 @@ def index_cmd(args: IndexArgs) -> None:
         else:
             remaining = int((monotonic() - progress_started) / completed * (total - completed))
             eta = f"ETA {remaining // 60:02d}m{remaining % 60:02d}s"
-        track_name = "starting" if audio_path is None else audio_path.name[:48]
+        track_name = "starting" if audio_path is None else audio_path.path.name[:48]
         progress_line = f"Indexing [{bar}] {percent:3d}% {completed}/{total} {eta} {track_name}"
         if sys.stderr.isatty():
             print(f"\r{progress_line}", end="", file=sys.stderr, flush=True)
@@ -336,7 +339,7 @@ def setup_cmd(args: SetupArgs) -> None:
             if len(answer.strip()) > 0:
                 cache_dir = answer
 
-        audio_count = sum(path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES for path in library.rglob("*"))
+        audio_count = sum(path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES for path in library.path.rglob("*"))
         if audio_count == 0:
             print(f"warning: no supported audio files found yet under {library}", file=sys.stderr)
 
@@ -390,7 +393,7 @@ def _prompt_path(question: str, *, default: str | None = None, only_directories:
     return answer
 
 
-def _prompt_library_dir(cmd: str, *, fallback: Path | None = None) -> Path:
+def _prompt_library_dir(cmd: str, *, fallback: ResolvedPath | None = None) -> ResolvedPath:
     """Prompt for a library directory until it exists; empty answer re-prompts, cancel exits."""
     while True:
         answer = _prompt_path("Music library directory", default=str(fallback) if fallback is not None else None)
@@ -399,10 +402,11 @@ def _prompt_library_dir(cmd: str, *, fallback: Path | None = None) -> Path:
         if len(answer.strip()) == 0:
             print(f"moodpl {cmd}: empty directory", file=sys.stderr)
             continue
-        candidate = Path(answer).expanduser()
-        if candidate.is_dir():
+        expanded = Path(answer).expanduser()
+        candidate = ResolvedPath(expanded)
+        if candidate.path.is_dir():
             return candidate
-        print(f"moodpl {cmd}: directory does not exist: {candidate}", file=sys.stderr)
+        print(f"moodpl {cmd}: directory does not exist: {expanded}", file=sys.stderr)
 
 
 def _prompt_blend_mode(current: BlendMode) -> BlendMode:
@@ -422,12 +426,12 @@ def _prompt_blend_mode(current: BlendMode) -> BlendMode:
     return answer
 
 
-def _setup_library_dir(cfg: Config, *, non_interactive: bool) -> Path:
+def _setup_library_dir(cfg: Config, *, non_interactive: bool) -> ResolvedPath:
     """Return the library directory for setup; interactive setup prompts with the current value prefilled."""
     library = cfg.library_dir
     if not non_interactive:
         return _prompt_library_dir("setup", fallback=library)
-    if library is not None and library.is_dir():
+    if library is not None and library.path.is_dir():
         return library
     if library is None:
         _fail("setup", "no library directory: pass --library (terminal not detected)")
