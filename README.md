@@ -1,5 +1,7 @@
 # local-mood-playlist
 
+Warning: alpha state, the main functionality is there, but the docs/experience may be janky, configs and behaviour may change
+
 CLI for local mood playlists. It exposes one unified, mood-ordered label list,
 indexes audio with vendored Music2Emotion, and creates M3U8 playlists from cached
 mood scores.
