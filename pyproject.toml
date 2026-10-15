@@ -46,6 +46,8 @@ exclude-dependencies = ["matplotlib"]
 
 [tool.uv.build-backend]
 module-name = "local_mood_playlist"
+wheel-exclude = ["**/UPSTREAM.md"]
+source-exclude = ["**/music2emo.pyi"]
 
 [tool.ruff]
 line-length = 120
