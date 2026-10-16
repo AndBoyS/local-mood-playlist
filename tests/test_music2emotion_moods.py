@@ -25,11 +25,8 @@ def model_theme_tags() -> list[str]:
     return sorted(str(tag) for tag in loaded if str(tag).startswith(TAG_PREFIX))
 
 
-@pytest.mark.parametrize("canonical_tag", model_theme_tags())
-def test_model_theme_tag_resolves_into_cli_vocabulary(canonical_tag: str) -> None:
-    stripped = canonical_tag.removeprefix(TAG_PREFIX)
-    expected = music2emotion.CANONICAL_NAME_OVERRIDES.get(stripped, stripped)
-    assert to_cli_moods(canonical_tag) == expected
+def test_dream_override_maps_to_dreamy() -> None:
+    assert to_cli_moods("mood/theme---dream") == "dreamy"
 
 
 def test_theme_tags_map_onto_the_cli_vocabulary() -> None:

@@ -30,6 +30,8 @@
 - Validate values at input boundaries. Prefer `object` over `Any` for unknown
   data; use `Any` only for inherently dynamic APIs.
 - Don't do mock tests
+- Don't need to test things which are protected by design (e.g. that funcs operating on ResolvedPath are absolute and expanded)
+- When asking for review, also point to check if tests are not redundant
 - Use git naming conventions
 - We don't do env vars as configs
 - no walrus
