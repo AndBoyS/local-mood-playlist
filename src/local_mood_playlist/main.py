@@ -14,6 +14,7 @@ from InquirerPy.base.control import Choice
 
 from local_mood_playlist.args import CreateArgs, IndexArgs, SetupArgs
 from local_mood_playlist.config import (
+    DEFAULT_THRESHOLD,
     Config,
     config_from_args,
     config_from_user_file,
@@ -165,24 +166,41 @@ def run_mood_picker(*, show_extended: bool, default_mode: BlendMode) -> MoodSele
     return ask_moods_with_mode(entries, message="Choose moods to blend", default_mode=default_mode)
 
 
-def _resolve_playlist_output(output: str | None, moods: list[MoodName]) -> ResolvedPath | None:
+def _moods_str(moods: list[MoodName], *, mode: BlendMode, threshold: float) -> str:
+    """What {moods} in filename expands to."""
+    parts: list[str] = ["-".join(moods)]
+    if mode != "and":
+        parts.append(mode)
+    if threshold != DEFAULT_THRESHOLD:
+        parts.append(f"t{threshold:.2f}")
+    return "-".join(parts)
+
+
+def _resolve_playlist_output(
+    output: str | None,
+    moods: list[MoodName],
+    *,
+    mode: BlendMode = "and",
+    threshold: float = DEFAULT_THRESHOLD,
+) -> ResolvedPath | None:
     if output is None:
         return None
-    joined = "-".join(moods)
     if sys.platform == "win32" and re.fullmatch(r"[A-Za-z]:", output) is not None:
         print(
             f"moodpl create: warning: output {output!r} is a bare drive letter which is not the root"
             " but the relative path to current folder",
             file=sys.stderr,
         )
+    moods_str = _moods_str(moods, mode=mode, threshold=threshold)
     if "{moods}" in output:
-        candidate = Path(output.replace("{moods}", joined))
+        # str.format will error on stray brace
+        candidate = Path(output.replace("{moods}", moods_str))
         if candidate.suffix.lower() != ".m3u8":
             candidate = Path(f"{candidate}.m3u8")
     elif output.lower().endswith(".m3u8"):
         candidate = Path(output)
     else:
-        candidate = Path(output) / f"{joined}.m3u8"
+        candidate = Path(output) / f"{moods_str}.m3u8"
     return ResolvedPath(candidate)
 
 
@@ -219,7 +237,7 @@ def create_cmd(args: CreateArgs) -> None:
         print("moodpl create: each mood label can be selected only once", file=sys.stderr)
         raise SystemExit(2)
 
-    output_path = _resolve_playlist_output(cfg.output, moods)
+    output_path = _resolve_playlist_output(cfg.output, moods, mode=mode, threshold=cfg.threshold)
 
     if cfg.cache_path is None and cfg.library_dir is not None:
         _ = require_library_dir(cfg, command="create")

@@ -53,9 +53,11 @@ class CreateArgs(tap.TypedArgs):
         "-o",
         default=None,
         help=(
-            "Playlist destination; {moods} names the playlist file (.m3u8 appended when missing), a value"
-            " ending in .m3u8 is used as-is, otherwise it is a directory receiving <moods>.m3u8 (default:"
-            " config `output` or stdout)"
+            "Playlist destination; {moods} names the playlist file and expands to the selected labels"
+            " joined by -, plus the blend mode and threshold (t<score>, e.g. t0.30, always 2 decimals)"
+            " whenever they differ from the defaults (and / 0.5) (.m3u8 appended when missing), a value"
+            " ending in .m3u8 is used as-is, otherwise it is a directory receiving <moods>.m3u8 following"
+            " the same expansion rule (default: config `output` or stdout)"
         ),
     )
     library: str | None = tap.arg(default=None, help="Library root for the default prediction cache")

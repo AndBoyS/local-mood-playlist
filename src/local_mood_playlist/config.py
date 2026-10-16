@@ -17,7 +17,7 @@ import os
 import tomllib
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Self, assert_never
+from typing import Final, Self, assert_never
 
 import msgspec
 
@@ -102,12 +102,13 @@ class Config:
         )
 
 
+DEFAULT_THRESHOLD: Final = 0.5
 DEFAULT_CONFIG = LayerConfig(
     cache_dir=default_cache_dir(),
     library_dir=None,
     cache_path=None,
     blend_mode="and",
-    threshold=0.5,
+    threshold=DEFAULT_THRESHOLD,
     count=None,
     output=None,
     show_extended=False,

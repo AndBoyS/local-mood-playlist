@@ -52,7 +52,7 @@ created by `moodpl setup`) may set:
 - `mode` — default blend mode: `and`, `or`, or `mean`
 - `threshold` — default minimum blend score in (0, 1] (default `0.5`)
 - `count` — default playlist size cap (default: all ranked tracks)
-- `output` — default playlist destination. If `{moods}` appears, it expands to the selected labels joined by `-` and names the playlist file (`.m3u8` appended when missing). Without `{moods}`, a value ending in `.m3u8` (case-insensitive) is used as-is, and any other value is treated as a directory (created if needed) receiving `<moods>.m3u8` (a single mood gives `calm.m3u8`)
+- `output` — default playlist destination. If `{moods}` appears, it expands to the whole playlist name part: the selected labels joined by `-`, plus the blend mode (`or`/`mean`) and threshold (`t<score>`, e.g. `t0.30`, always 2 decimals) whenever they differ from the defaults (`and` / `0.5`) — e.g. `calm-happy-or-t0.75.m3u8`, but plain `calm.m3u8` for a default run. The `{moods}` value names the playlist file (`.m3u8` appended when missing). Without any placeholder, a value ending in `.m3u8` (case-insensitive) is used as-is, and any other value is treated as a directory (created if needed) receiving `<moods>.m3u8` following the same expansion rule
 - `show_extended` — offer extended model-only mood tags in the picker by default
 - `device` — inference device: `cpu`, `mps`, or `cuda` (default: first available of CUDA, MPS, then CPU)
 
