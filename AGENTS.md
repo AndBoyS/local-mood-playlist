@@ -4,7 +4,7 @@
 
 - Python 3.13, managed with uv. Run Python through `uv run ...`, never bare
   `python` or `pip`.
-- Lint: `uv run ruff check --fix` (fix is safe, you can you use it every time).
+- Lint: always use `uv run ruff check --fix` with --fix
 - Types: `uv run pyrefly check` — strict preset. See [`docs/typing.md`](docs/typing.md).
 
 ## Current scope
