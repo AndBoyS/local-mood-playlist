@@ -1,5 +1,6 @@
 """CLI shell for fixed-vocabulary mood playlists."""
 
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import replace
@@ -164,9 +165,32 @@ def run_mood_picker(*, show_extended: bool, default_mode: BlendMode) -> MoodSele
     return ask_moods_with_mode(entries, message="Choose moods to blend", default_mode=default_mode)
 
 
+def _resolve_playlist_output(output: str | None, moods: list[MoodName]) -> ResolvedPath | None:
+    if output is None:
+        return None
+    joined = "-".join(moods)
+    if sys.platform == "win32" and re.fullmatch(r"[A-Za-z]:", output) is not None:
+        print(
+            f"moodpl create: warning: output {output!r} is a bare drive letter which is not the root"
+            " but the relative path to current folder",
+            file=sys.stderr,
+        )
+    if "{moods}" in output:
+        candidate = Path(output.replace("{moods}", joined))
+        if candidate.suffix.lower() != ".m3u8":
+            candidate = Path(f"{candidate}.m3u8")
+    elif output.lower().endswith(".m3u8"):
+        candidate = Path(output)
+    else:
+        candidate = Path(output) / f"{joined}.m3u8"
+    return ResolvedPath(candidate)
+
+
 def _validate_playlist_output_path(output_path: ResolvedPath, cache_path: ResolvedPath | None) -> None:
     if output_path.path.suffix.lower() != ".m3u8":
         raise ValueError("playlist output path must end in .m3u8")
+    if output_path.path.parent.is_file():
+        raise ValueError(f"playlist output parent directory is an existing file: {output_path.path.parent}")
     if cache_path is not None and output_path == cache_path:
         raise ValueError("playlist output path must not overwrite prediction cache")
 
@@ -195,9 +219,7 @@ def create_cmd(args: CreateArgs) -> None:
         print("moodpl create: each mood label can be selected only once", file=sys.stderr)
         raise SystemExit(2)
 
-    output_arg = cfg.output
-    if output_arg is not None and "{moods}" in output_arg:
-        output_arg = output_arg.replace("{moods}", "-".join(moods))
+    output_path = _resolve_playlist_output(cfg.output, moods)
 
     if cfg.cache_path is None and cfg.library_dir is not None:
         _ = require_library_dir(cfg, command="create")
@@ -207,7 +229,7 @@ def create_cmd(args: CreateArgs) -> None:
         _fail("create", "pass --cache or --library (or run `moodpl setup`) to use indexed predictions")
 
     if dry_run and (cache_path is None or not cache_path.path.is_file()):
-        _print_request_preview(moods, mode=mode, threshold=cfg.threshold, count=cfg.count, output_arg=output_arg)
+        _print_request_preview(moods, mode=mode, threshold=cfg.threshold, count=cfg.count, output_path=output_path)
         return
 
     if cache_path is None:
@@ -216,7 +238,6 @@ def create_cmd(args: CreateArgs) -> None:
     try:
         cache = PredictionCache(cache_path, model_version=MODEL_VERSION)
         ranked = rank_cached_tracks(cache, moods=moods, mode=mode, limit=cfg.count, min_score=cfg.threshold)
-        output_path = ResolvedPath(Path(output_arg)) if output_arg is not None else None
         if output_path is not None:
             _validate_playlist_output_path(output_path, cache.path)
 
@@ -251,13 +272,13 @@ def _print_preview_details(moods: list[MoodName], *, mode: BlendMode, threshold:
 
 
 def _print_request_preview(
-    moods: list[MoodName], *, mode: BlendMode, threshold: float, count: int | None, output_arg: str | None
+    moods: list[MoodName], *, mode: BlendMode, threshold: float, count: int | None, output_path: ResolvedPath | None
 ) -> None:
     print("Playlist request preview (not ranked; no usable prediction cache)")
     _print_preview_details(moods, mode=mode, threshold=threshold)
     print("  Tracks requested: all ranked tracks" if count is None else f"  Tracks requested: {count}")
-    if output_arg is not None:
-        print(f"  Would write: {output_arg}")
+    if output_path is not None:
+        print(f"  Would write: {output_path}")
 
 
 def index_cmd(args: IndexArgs) -> None:

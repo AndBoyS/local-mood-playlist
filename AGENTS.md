@@ -12,7 +12,10 @@
 - CLI exposes a fixed mood vocabulary through `moodpl moods` and
   `moodpl create MOOD [MOOD ...]`; `moodpl create` ranks cached predictions by the
   minimum probability of selected moods and writes M3U8 output to `--output` or
-  stdout. With a cache, `--dry-run` previews ranked tracks without writing;
+  stdout; `{moods}` in `--output`/`output` names the playlist file (`.m3u8`
+  appended when missing), a value ending in `.m3u8` is used as-is, anything
+  else is a directory receiving `<moods>.m3u8`.
+  With a cache, `--dry-run` previews ranked tracks without writing;
   without a cache, it previews the request only. With no labels in a terminal,
   InquirerPy opens a multi-select picker with a blend-mode toggle key.
 - `moodpl index DIRECTORY` runs vendored Music2Emotion in-process in the main

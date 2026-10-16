@@ -52,7 +52,11 @@ class CreateArgs(tap.TypedArgs):
     output: str | None = tap.arg(
         "-o",
         default=None,
-        help="Playlist destination (.m3u8); use {moods} for the selected moods (default: config `output` or stdout)",
+        help=(
+            "Playlist destination; {moods} names the playlist file (.m3u8 appended when missing), a value"
+            " ending in .m3u8 is used as-is, otherwise it is a directory receiving <moods>.m3u8 (default:"
+            " config `output` or stdout)"
+        ),
     )
     library: str | None = tap.arg(default=None, help="Library root for the default prediction cache")
     cache: str | None = tap.arg(default=None, help="Prediction cache file path (overrides --library)")

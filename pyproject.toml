@@ -119,3 +119,8 @@ implicitly-defined-attribute = true
 implicit-any = true
 implicit-bool = true
 invalid-cast = true
+
+[tool.pytest.ini_options]
+markers = [
+    "expects_stderr: test asserts stderr output itself; the autouse quiet-stderr check is skipped",
+]
