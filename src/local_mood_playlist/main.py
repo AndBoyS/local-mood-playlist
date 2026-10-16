@@ -186,7 +186,7 @@ def create_cmd(args: CreateArgs) -> None:
     mode = cfg.blend_mode
     if len(moods) == 0:
         picked = run_mood_picker(show_extended=cfg.show_extended, default_mode=mode)
-        if picked is None:
+        if picked is None or len(picked.moods) == 0:
             print("No moods selected; cancelled.")
             return
         moods = picked.moods
