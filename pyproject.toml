@@ -41,8 +41,9 @@ build-backend = "uv_build"
 [tool.uv]
 exclude-newer = "7 days"
 exclude-newer-package = { pyrefly = "2099-01-01", pyrefly-torch-stubs = "2099-01-01", pyrefly-shape-extensions = "2099-01-01" }
-# music21 hard-declares matplotlib, not used by us
-exclude-dependencies = ["matplotlib"]
+# music21 hard-declares matplotlib, not used by us.
+# torch hard-declares these; only used by torch.compile / hub / DCP, which we don't touch.
+exclude-dependencies = ["matplotlib", "jinja2", "markupsafe", "networkx", "filelock", "fsspec", "sympy", "mpmath", "setuptools"]
 
 [tool.uv.build-backend]
 module-name = "local_mood_playlist"
