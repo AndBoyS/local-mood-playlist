@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import shutil
 import tempfile
@@ -23,8 +22,6 @@ from .utils.btc_model import BTC_model
 from .utils.hparams import HParams
 from .utils.mert import FeatureExtractorMERT
 from .utils.mir_eval_modules import audio_file_to_features, idx2voca_chord
-
-logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
 
 PITCH_CLASS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 

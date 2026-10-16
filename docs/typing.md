@@ -36,7 +36,33 @@ and implementation straightforward.
 - Avoid `typing.cast`: it does not validate values. Prefer `isinstance`, an
   assertion for a verified invariant, or a small typed adapter. Use a narrow
   cast only when an external API contract guarantees the type but the checker
-  cannot express it; explain that guarantee nearby.
+  cannot express it; explain that guarantee nearby. In a runtime-evaluated
+  position a `cast` cannot carry a shape subscript; a deferred local
+  annotation (`x: Tensor[[...]] = ...` under `from __future__ import
+  annotations`) is the runtime-neutral equivalent for re-establishing shapes.
+
+## Tensor shape types
+
+`mert_model.py` (and any future inference-time model code) is annotated with
+Pyrefly's tensor shape types. The shape machinery is dev-only:
+
+- `pyrefly-torch-stubs` (dev dep) installs the shape-aware torch overlay and
+  pulls `pyrefly-shape-extensions`; shape tracking activates automatically
+  once pyrefly resolves `shape_extensions`.
+- Runtime code imports shape symbols only under `TYPE_CHECKING` and relies on
+  `from __future__ import annotations`, so the published package never needs
+  them (PEP 695 type-param bounds are also unevaluated at import).
+- Known constraint: `Module.forward` loops and per-instance kernel/stride
+  variants cannot all be tracked statically; where the shape is a pure
+  function of pinned config constants, re-establish it with one documented
+  annotation fallback at the boundary (see `_FeatureEncoder.forward`).
+- Shape-typed `forward` overrides pass strict's override check as of
+  pyrefly 1.4.0 ([fixed][pyrefly-140]); no diagnostic suppression is needed.
+  The port itself carries zero in-code ignores; the repo-wide 8 suppressed
+  diagnostics are one deliberate ignore in `config.py` plus stub-level
+  suppressions pyrefly does not itemize.
+
+[pyrefly-140]: https://github.com/facebook/pyrefly/releases/tag/1.4.0
 
 ## Handling checker errors
 
