@@ -27,6 +27,7 @@ model = Music2emo(
     model_weights=CACHE_ROOT / "assets/50b68ba9b28c03c9acbc0b18c6fefe3c4ccdda59/music2emo/J_all.safetensors",
     chord_model_weights=CACHE_ROOT / "assets/50b68ba9b28c03c9acbc0b18c6fefe3c4ccdda59/music2emo/btc_model_large_voca.safetensors",
     mert_snapshot=CACHE_ROOT / "assets/50b68ba9b28c03c9acbc0b18c6fefe3c4ccdda59/mert.zst-decompressed",
+    device="auto",
 )
 print(f"model load: {time.perf_counter() - t0:.2f}s", file=sys.stderr)
 

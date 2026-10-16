@@ -20,6 +20,7 @@ class Music2emo:
         chord_model_weights: str | Path | None = None,
         *,
         mert_snapshot: str | Path,
+        device: str,
     ) -> None: ...
 
     def predict(self, audio: str | Path, threshold: float = 0.5) -> Music2emoPrediction: ...

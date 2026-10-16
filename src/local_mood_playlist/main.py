@@ -298,6 +298,7 @@ def index_cmd(args: IndexArgs) -> None:
             library,
             cache_path=cache_path,
             cache_root=cfg.cache_dir,
+            device=cfg.device,
             force=force,
             on_progress=report_progress,
         )

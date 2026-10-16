@@ -23,6 +23,7 @@ import msgspec
 
 from local_mood_playlist.args import CreateArgs, IndexArgs, SetupArgs
 from local_mood_playlist.moods import BlendMode
+from local_mood_playlist.music2emotion import Device
 from local_mood_playlist.paths import ResolvedPath
 
 
@@ -61,6 +62,7 @@ class LayerConfig:
     count: int | None | _Unset = UNSET
     output: str | None | _Unset = UNSET
     show_extended: bool | _Unset = UNSET
+    device: Device | _Unset = UNSET
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,7 @@ class Config:
     count: int | None
     output: str | None
     show_extended: bool
+    device: Device
 
     @property
     def pred_cache_path(self) -> ResolvedPath | None:
@@ -95,6 +98,7 @@ class Config:
             count=self.count if self.count is not None else msgspec.UNSET,
             output=self.output if self.output is not None else msgspec.UNSET,
             show_extended=self.show_extended,
+            device=self.device if self.device != "auto" else msgspec.UNSET,
         )
 
 
@@ -107,6 +111,7 @@ DEFAULT_CONFIG = LayerConfig(
     count=None,
     output=None,
     show_extended=False,
+    device="auto",
 )
 
 
@@ -130,6 +135,7 @@ class RawConfig(msgspec.Struct, forbid_unknown_fields=True, omit_defaults=True):
     count: int | msgspec.UnsetType = msgspec.UNSET
     output: str | msgspec.UnsetType = msgspec.UNSET
     show_extended: bool | msgspec.UnsetType = msgspec.UNSET
+    device: Device | msgspec.UnsetType = msgspec.UNSET
 
     @classmethod
     def from_user_config(cls) -> Self:
@@ -178,6 +184,7 @@ def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:
         return LayerConfig(
             library_dir=_path_or_unset(args.library),
             cache_path=_path_or_unset(args.cache),
+            device=_non_empty_or_unset(args.device),
         )
     if isinstance(args, SetupArgs):
         return LayerConfig(
@@ -200,6 +207,7 @@ def config_from_user_file() -> LayerConfig:
         count=_non_empty_or_unset(raw.count),
         output=_non_empty_or_unset(raw.output),
         show_extended=_non_empty_or_unset(raw.show_extended),
+        device=_non_empty_or_unset(raw.device),
     )
 
 

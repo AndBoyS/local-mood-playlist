@@ -36,12 +36,12 @@ requires explicit labels.
 - `moodpl create MOOD [MOOD ...] [-n COUNT] [-o PATH] [-t SCORE] [-e] [--library DIRECTORY | --cache PATH] [--dry-run]` — rank fresh cached predictions by the minimum probability of selected moods and emit an M3U8 playlist. `-n`, `-t`, `-o`, and `-e` default to the config keys `count`, `threshold`, `output`, and `show_extended`. `-e` also offers extended model-only tags (e.g. `children`, `sport`, `film`, `game`, `trailer`) in the picker. Track entries are relative to the playlist file's own location, so the playlist and the library can move together while keeping their directory layout (a playlist placed directly inside the library root simply gets entries like `Album/song.mp3`; on Windows, a playlist on a different drive from the library gets absolute entries). Without `-o` (and with `output` unset), playlist text goes to stdout with absolute track paths. Note: config values have no per-invocation "unset" switch — a configured `count` can only be overridden to another size, not back to "all" (same for `show_extended` vs `-e`), so omit these keys from `config.toml` unless you want them as standing defaults.
 - `moodpl --help` — show CLI help.
 
-Music2Emotion runs in-process using the main Python 3.13 environment and
-PyTorch/MPS when available, else CPU. Set `SP_MUSIC2EMOTION_DEVICE` to `cpu`,
-`mps`, `cuda`, or `auto` to override. First inference downloads pinned MERT
-weights from Hugging Face and may take time. M4A files require FFmpeg on
-`PATH`. MERT is licensed CC BY-NC 4.0, so this integration is limited to
-non-commercial use unless you obtain separate permission.
+Music2Emotion runs in-process using the main Python 3.13 environment. Inference
+uses the first available GPU (CUDA, then MPS), falling back to CPU; pass
+`moodpl index --device {auto,cpu,mps,cuda}` to override. First inference downloads
+pinned MERT weights from Hugging Face and may take time. M4A files require
+FFmpeg on `PATH`. MERT is licensed CC BY-NC 4.0, so this integration is limited
+to non-commercial use unless you obtain separate permission.
 
 Predictions cache under `~/.cache/moodpl/predictions` by default, keyed by the
 resolved library path. The user config file (`~/.config/moodpl/config.toml`,
@@ -54,6 +54,7 @@ created by `moodpl setup`) may set:
 - `count` — default playlist size cap (default: all ranked tracks)
 - `output` — default playlist destination; `{moods}` expands to selected labels
 - `show_extended` — offer extended model-only mood tags in the picker by default
+- `device` — inference device: `cpu`, `mps`, or `cuda` (default: first available of CUDA, MPS, then CPU)
 
 CLI flags keep precedence over the config file. Cache records
 invalidate when audio metadata or model version changes. Cache is a local pickle;

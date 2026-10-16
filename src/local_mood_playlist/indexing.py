@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from local_mood_playlist.music2emotion import MODEL_VERSION, Music2Emotion
+from local_mood_playlist.music2emotion import MODEL_VERSION, Device, Music2Emotion
 from local_mood_playlist.paths import ResolvedPath
 from local_mood_playlist.predictions import PredictionCache
 
@@ -37,6 +37,7 @@ def index_library(
     *,
     cache_path: ResolvedPath,
     cache_root: ResolvedPath,
+    device: Device = "auto",
     force: bool = False,
     on_progress: ProgressCallback | None = None,
 ) -> IndexSummary:
@@ -71,7 +72,7 @@ def index_library(
         if on_progress is not None:
             on_progress((0, len(pending), None))
         try:
-            model = Music2Emotion(cache_root)
+            model = Music2Emotion(cache_root, device=device)
             with model.prepare_pipeline(pending) as pipeline:
                 for index, (audio_file, prepared) in enumerate(pipeline, start=1):
                     if isinstance(prepared, Exception):

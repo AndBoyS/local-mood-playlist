@@ -176,6 +176,7 @@ class Music2emo:
         chord_model_weights: str | Path | None = None,
         *,
         mert_snapshot: str | Path,
+        device: str | torch.device,
     ) -> None:
         self.root = Path(__file__).resolve().parent
         self.model_weights = Path(model_weights) if model_weights is not None else self.root / "saved_models" / "J_all.safetensors"
@@ -189,7 +190,7 @@ class Music2emo:
             self.work_dir = Path(work_dir).expanduser().resolve()
             self.work_dir.mkdir(parents=True, exist_ok=True)
 
-        requested_device = os.environ.get("SP_MUSIC2EMOTION_DEVICE", "auto").lower()
+        requested_device = str(device).lower()
         if requested_device == "auto":
             if torch.cuda.is_available():
                 requested_device = "cuda"

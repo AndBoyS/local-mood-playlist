@@ -7,6 +7,7 @@ both see exactly the same typed args.
 import typed_argparse as tap
 
 from local_mood_playlist.moods import BlendMode, MoodName
+from local_mood_playlist.music2emotion import Device
 
 
 class IndexArgs(tap.TypedArgs):
@@ -15,6 +16,11 @@ class IndexArgs(tap.TypedArgs):
     force: bool = tap.arg(
         default=False,
         help="Recompute predictions for every supported audio file",
+        auto_default_help=False,
+    )
+    device: Device | None = tap.arg(
+        default=None,
+        help="Inference device (default: first available of CUDA, MPS, then CPU); pass cpu, mps, or cuda to override",
         auto_default_help=False,
     )
 
