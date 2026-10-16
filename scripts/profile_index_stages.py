@@ -6,18 +6,18 @@ key analysis, and the final feed-forward. Prints per-track and per-stage timings
 
 import sys
 import time
-from pathlib import Path
 
 import numpy as np
 import torch
+from const import REPO_DIR
 
-sys.path.insert(0, "src")
+sys.path.insert(0, str(REPO_DIR / "src"))
 
 from local_mood_playlist.vendor.music2emo import Music2emo  # noqa: E402
 from local_mood_playlist.vendor.utils.mir_eval_modules import audio_file_to_features  # noqa: E402
 
-CACHE_ROOT = Path(".cache")
-LIBRARY = Path("temp/test-lib")
+CACHE_ROOT = REPO_DIR / ".cache"
+LIBRARY = REPO_DIR / "temp" / "test-lib"
 
 t0 = time.perf_counter()
 with open(CACHE_ROOT / "profile-data.npz", "wb"):
@@ -144,9 +144,9 @@ for track in FILES:
     with stage("key_read_json"):
         import json
 
-        with (Path("src/local_mood_playlist/vendor") / "inference/data/chord_root.json").open("rb") as f:
+        with (REPO_DIR / "src" / "local_mood_playlist" / "vendor" / "inference/data/chord_root.json").open("rb") as f:
             chord_root_dic = json.load(f)
-        with (Path("src/local_mood_playlist/vendor") / "inference/data/chord_attr.json").open("rb") as f:
+        with (REPO_DIR / "src" / "local_mood_playlist" / "vendor" / "inference/data/chord_attr.json").open("rb") as f:
             chord_attr_dic = json.load(f)
 
     with stage("key_analyze"):

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import torch
 import zstandard as zstd
+from const import REPO_DIR
 from huggingface_hub import HfApi
 from safetensors.torch import save as save_safetensors
 
@@ -35,9 +36,6 @@ MERT_UPSTREAM_REVISION = "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5"
 
 MERT_LAYERS_TO_KEEP = 7
 MERT_ZSTD_LEVEL = 12
-
-# Development-only
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _url(repo: str, *, revision: str, path: str) -> str:
@@ -209,7 +207,7 @@ def upload(staging: Path) -> str:
 
 def update_assets_pins(digests: dict[str, str]) -> None:
     """Write the bundle-dir digest pins into assets.py."""
-    path = REPO_ROOT / "src" / "local_mood_playlist" / "assets.py"
+    path = REPO_DIR / "src" / "local_mood_playlist" / "assets.py"
     text = path.read_text(encoding="utf-8")
     for name in BUNDLE_FILES:
         marker = f'"{name}": "'
