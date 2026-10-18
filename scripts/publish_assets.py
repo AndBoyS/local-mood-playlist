@@ -28,7 +28,6 @@ from safetensors.torch import save as save_safetensors
 from local_mood_playlist.assets import BUNDLE_FILES, VENDORED_REPO, dir_digest
 from local_mood_playlist.config import default_cache_dir
 
-# Upstream provenance (see README generated below for the full chain).
 MUSIC2EMO_UPSTREAM_REPO = "amaai-lab/music2emo"
 MUSIC2EMO_UPSTREAM_REVISION = "b036e59471583c3d5b30c69e63e8c7323cc36c4a"
 MERT_UPSTREAM_REPO = "m-a-p/MERT-v1-95M"
@@ -207,7 +206,7 @@ def upload(staging: Path) -> str:
 
 def update_assets_pins(digests: dict[str, str]) -> None:
     """Write the bundle-dir digest pins into assets.py."""
-    path = REPO_DIR / "src" / "local_mood_playlist" / "assets.py"
+    path = REPO_DIR / "src/local_mood_playlist/assets.py"
     text = path.read_text(encoding="utf-8")
     for name in BUNDLE_FILES:
         marker = f'"{name}": "'

@@ -96,6 +96,7 @@ use-ignore-files = false
 output-format = "min-text"
 min-severity = "warn"
 preset = "strict"
+search-path = ["tests/model", "scripts"]
 
 [tool.pyrefly.errors]
 unannotated-return = true
@@ -121,6 +122,8 @@ implicit-bool = true
 invalid-cast = true
 
 [tool.pytest.ini_options]
+pythonpath = ["scripts"]
 markers = [
+    "model: needs local model assets and compute (MPS/GPU); runs on the Mac, excluded from CI",
     "expects_stderr: test asserts stderr output itself; the autouse quiet-stderr check is skipped",
 ]
