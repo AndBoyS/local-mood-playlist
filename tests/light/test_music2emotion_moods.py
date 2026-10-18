@@ -5,16 +5,14 @@ from disk, so these tests never download model bundles, touch the network, or
 import torch.
 """
 
-from pathlib import Path
-
 import numpy as np
 import pytest
+from const import REPO_DIR
 
-from local_mood_playlist import music2emotion
 from local_mood_playlist.moods import MOOD_NAMES
 from local_mood_playlist.music2emotion import TAG_PREFIX, to_cli_moods
 
-TAG_LIST_PATH = Path(music2emotion.__file__).parent / "vendor" / "inference" / "data" / "tag_list.npy"
+TAG_LIST_PATH = REPO_DIR / "src/local_mood_playlist/vendor/inference/data/tag_list.npy"
 
 
 def model_theme_tags() -> list[str]:
