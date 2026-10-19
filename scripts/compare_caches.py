@@ -1,9 +1,8 @@
 """Compare two prediction caches produced by old vs new indexing paths.
 
-Entries are keyed canonically but stored under two key types across
-generations (plain ``Path`` before the ResolvedPath refactor, wrapped
-afterwards); both are normalized to their string form here so the script can
-compare cache files of any generation.
+Cache entries are stored under two key types across generations; both are
+normalized to their string form here so the script can compare cache files of
+any generation.
 """
 
 import os

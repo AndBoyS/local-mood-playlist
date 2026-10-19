@@ -24,9 +24,6 @@ TAG_PREFIX = "mood/theme---"
 # Model tag list says "dream"; mood vocabulary says "dreamy".
 CANONICAL_NAME_OVERRIDES = {"dream": "dreamy"}
 
-# One prepared track in flight ahead of the consumer: CPU staging of the next
-# track overlaps GPU inference of the current one.
-
 
 class PreparedTrack(Protocol):
     """CPU-staged audio for one track (vendored ``Music2emo.prepare`` output).
@@ -99,7 +96,7 @@ class Music2Emotion:
         return self._model.prepare(audio_path.path)
 
     def predict_prepared(self, prepared: PreparedTrack) -> TrackPrediction:
-        """GPU inference for a track staged by :meth:`prepare`."""
+        """Inference for a track staged by :meth:`prepare`; runs on the model's device."""
         return _to_prediction(self._model.infer(prepared, threshold=0.5))
 
     @contextmanager

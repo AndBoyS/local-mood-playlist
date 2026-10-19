@@ -66,7 +66,6 @@ for track in FILES:
     track_start = time.perf_counter()
     track_grand = grand
 
-    # --- decode ---
     with stage("decode"):
         waveform_np, original_sample_rate = (
             __import__("local_mood_playlist.vendor.music2emo", fromlist=["_load_audio"])._load_audio(track)
@@ -111,7 +110,6 @@ for track in FILES:
             batched.append(model.feature_extractor.extract_features_from_segment(segment, model.feature_extractor.sr))
         final_embedding_mert = torch.cat(batched, dim=0).mean(dim=0)
 
-    # --- cqt ---
     with stage("cqt"):
         config = model.chord_config
         feature, feature_per_second, song_length_second = audio_file_to_features(
@@ -152,7 +150,7 @@ for track in FILES:
         from music21 import note, stream
 
         starts, ends, pitchs = [], [], []
-        intervals, chords = None, None  # replaced below
+        intervals, chords = None, None
 
         # replicate the mir_eval re-load + key analysis
         feature_dir = model.work_dir / "temp_out"

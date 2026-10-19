@@ -43,7 +43,6 @@ from local_mood_playlist.predictions import PredictionCache
 class MoodEntry(NamedTuple):
     mood: MoodName
     color: str
-    # Is in cli by default?
     is_core: bool
 
 
@@ -193,7 +192,6 @@ def _resolve_playlist_output(
         )
     moods_str = _moods_str(moods, mode=mode, threshold=threshold)
     if "{moods}" in output:
-        # str.format will error on stray brace
         candidate = Path(output.replace("{moods}", moods_str))
         if candidate.suffix.lower() != ".m3u8":
             candidate = Path(f"{candidate}.m3u8")
