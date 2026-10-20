@@ -50,7 +50,9 @@ on Linux, CPU-only on macOS (MPS via Apple Silicon works out of the box) and
 Windows. Override with uv's `--torch-backend` flag (experimental; uv 0.9.20+):
 
 ```console
-# CPU-only torch on Linux (smaller install, no CUDA stack)
+# CPU-only torch build on Linux / Windows (smaller torch, no CUDA DLLs).
+# Note: the pinned Linux CUDA dependency stack (nvidia-*, cuda-toolkit,
+# triton) is still installed — only the torch/torchaudio builds change.
 uv tool install local-mood-playlist --torch-backend cpu
 
 # CUDA torch on Windows (CUDA DLLs bundled, ~2.5 GB)
