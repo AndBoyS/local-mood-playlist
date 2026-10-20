@@ -43,6 +43,24 @@ pinned MERT weights from Hugging Face and may take time. M4A files require
 FFmpeg on `PATH`. MERT is licensed CC BY-NC 4.0, so this integration is limited
 to non-commercial use unless you obtain separate permission.
 
+## Torch backend (CPU vs CUDA)
+
+The default install takes PyPI's platform-default torch build: CUDA-accelerated
+on Linux, CPU-only on macOS (MPS via Apple Silicon works out of the box) and
+Windows. Override with uv's `--torch-backend` flag (experimental; uv 0.9.20+):
+
+```console
+# CPU-only torch on Linux (smaller install, no CUDA stack)
+uv tool install local-mood-playlist --torch-backend cpu
+
+# CUDA torch on Windows (CUDA DLLs bundled, ~2.5 GB)
+uv tool install local-mood-playlist --torch-backend cu130
+```
+
+`auto` detects your GPU/driver instead of naming a backend. Changing the
+backend requires reinstalling the tool (`--torch-backend` with `--reinstall`);
+`uv tool upgrade` preserves the original choice.
+
 Predictions cache under `~/.cache/moodpl/predictions` by default, keyed by the
 resolved library path. The user config file (`~/.config/moodpl/config.toml`,
 created by `moodpl setup`) may set:
