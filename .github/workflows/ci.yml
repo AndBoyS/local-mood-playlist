@@ -16,14 +16,11 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install dependencies
-        run: uv sync --frozen
-
       - name: Ruff
-        run: uv run ruff check .
+        run: uv run --locked ruff check .
 
       - name: Pyrefly
-        run: uv run pyrefly check
+        run: uv run --locked pyrefly check
 
       - name: Tests (model tests deselected)
-        run: uv run pytest -m "not model"
+        run: uv run --locked pytest -m "not model"
