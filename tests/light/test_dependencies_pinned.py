@@ -6,7 +6,10 @@ uv.lock) — so every runtime dependency must have a `==` pin.
 Verification is static and universal: the built
 wheel's METADATA requirements must equal `uv export` of uv.lock (name + full
 version specifiers; markers intentionally not compared — the two artifacts
-normalize them differently). Dev-group packages never enter either side.
+normalize them differently). known blind spot: a loosened or removed pin
+marker (e.g. dropping `sys_platform == 'linux'` from the CUDA pins) stays
+green here — markers must be reviewed manually when editing pins.
+Dev-group packages never enter either side.
 """
 
 from __future__ import annotations
