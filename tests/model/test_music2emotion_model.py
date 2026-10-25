@@ -10,7 +10,7 @@ pytestmark = [pytest.mark.model]
 
 
 def test_cached_predictions_match_the_pinned_structure(indexed_library: IndexedLibrary) -> None:
-    cache = PredictionCache(ResolvedPath(indexed_library.cache), MODEL_VERSION)
+    cache = PredictionCache(ResolvedPath(indexed_library.music_cache), MODEL_VERSION)
     predictions = dict(cache.iter_predictions())
 
     expected_paths = {ResolvedPath(track).path for track in indexed_library.tracks}

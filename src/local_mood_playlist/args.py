@@ -12,7 +12,10 @@ from local_mood_playlist.music2emotion import Device
 
 class IndexArgs(tap.TypedArgs):
     library: str | None = tap.arg(positional=True, help="Music library directory (default: configured library_dir)")
-    cache: str | None = tap.arg(default=None, help="Prediction cache file path")
+    music_cache: str | None = tap.arg(
+        default=None,
+        help="Music prediction cache file path (overrides the default prediction cache location)",
+    )
     force: bool = tap.arg(
         default=False,
         help="Recompute predictions for every supported audio file",
@@ -21,6 +24,11 @@ class IndexArgs(tap.TypedArgs):
     device: Device | None = tap.arg(
         default=None,
         help="Inference device (default: first available of CUDA, MPS, then CPU); pass cpu, mps, or cuda to override",
+        auto_default_help=False,
+    )
+    model_cache: str | None = tap.arg(
+        default=None,
+        help="Model cache directory for downloaded model assets (default: config `model_cache` or ~/.cache/moodpl)",
         auto_default_help=False,
     )
 
@@ -61,7 +69,10 @@ class CreateArgs(tap.TypedArgs):
         ),
     )
     library: str | None = tap.arg(default=None, help="Library root for the default prediction cache")
-    cache: str | None = tap.arg(default=None, help="Prediction cache file path (overrides --library)")
+    music_cache: str | None = tap.arg(
+        default=None,
+        help="Music prediction cache file path (overrides --library and the default prediction cache location)",
+    )
     dry_run: bool = tap.arg(
         default=False,
         help="Preview ranked tracks when cache exists; never write a playlist",
@@ -71,7 +82,10 @@ class CreateArgs(tap.TypedArgs):
 
 class SetupArgs(tap.TypedArgs):
     library: str | None = tap.arg(default=None, help="Music library directory to configure")
-    cache_dir: str | None = tap.arg(default=None, help="Cache root directory to configure")
+    model_cache: str | None = tap.arg(
+        default=None,
+        help="Model cache directory for downloaded model assets (default: config `model_cache` or ~/.cache/moodpl)",
+    )
     mode: BlendMode | None = tap.arg(
         "-m",
         "--mode",

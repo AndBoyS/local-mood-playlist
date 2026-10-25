@@ -56,8 +56,8 @@ def indexed_library(pinned_library_tracks: list[Path], tmp_path_factory: pytest.
     for track in pinned_library_tracks:
         (context.library_dir / track.name).symlink_to(track)
 
-    cache = context.cache_dir / "predictions.pkl"
-    result = context.run("index", str(context.library_dir), "--cache", str(cache))
+    cache = context.data_dir / "predictions.pkl"
+    result = context.run("index", str(context.library_dir), "--music-cache", str(cache))
     assert result.exit_code == 0, result.stderr
     assert cache.is_file(), "index wrote no prediction cache"
-    return IndexedLibrary(context=context, cache=cache, tracks=sorted(context.library_dir.glob("*")))
+    return IndexedLibrary(context=context, music_cache=cache, tracks=sorted(context.library_dir.glob("*")))

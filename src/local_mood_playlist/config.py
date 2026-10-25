@@ -33,9 +33,14 @@ def _xdg_home(var: str, fallback: str) -> Path:
     return home if home.is_absolute() else Path.home() / fallback
 
 
-def default_cache_dir() -> ResolvedPath:
-    """Return the user-level default cache root: ``$XDG_CACHE_HOME/moodpl`` or ``~/.cache/moodpl``."""
+def default_model_cache_dir() -> ResolvedPath:
+    """Return the user-level default model cache root: ``$XDG_CACHE_HOME/moodpl`` or ``~/.cache/moodpl``."""
     return ResolvedPath(_xdg_home("XDG_CACHE_HOME", ".cache") / "moodpl")
+
+
+def default_music_dir() -> ResolvedPath:
+    """Return the user-level default predictions home: ``$XDG_DATA_HOME/moodpl`` or ``~/.local/share/moodpl``."""
+    return ResolvedPath(_xdg_home("XDG_DATA_HOME", ".local/share") / "moodpl")
 
 
 class _Unset:
@@ -54,9 +59,9 @@ UNSET = _Unset()
 class LayerConfig:
     """Values set by one source."""
 
-    cache_dir: ResolvedPath | _Unset = UNSET
+    model_cache: ResolvedPath | _Unset = UNSET
     library_dir: ResolvedPath | None | _Unset = UNSET
-    cache_path: ResolvedPath | None | _Unset = UNSET
+    music_cache: ResolvedPath | None | _Unset = UNSET
     blend_mode: BlendMode | _Unset = UNSET
     threshold: float | _Unset = UNSET
     count: int | None | _Unset = UNSET
@@ -69,9 +74,9 @@ class LayerConfig:
 class Config:
     """Fully resolved config layers merged by :func:`resolve_configs`."""
 
-    cache_dir: ResolvedPath
+    model_cache: ResolvedPath
     library_dir: ResolvedPath | None
-    cache_path: ResolvedPath | None
+    music_cache: ResolvedPath | None
     blend_mode: BlendMode
     threshold: float
     count: int | None
@@ -81,17 +86,17 @@ class Config:
 
     @property
     def pred_cache_path(self) -> ResolvedPath | None:
-        """Explicit cache path; otherwise a predictions path keyed by the configured library path."""
-        if self.cache_path is not None:
-            return self.cache_path
+        """Explicit music cache path; otherwise a predictions path keyed by the configured library path."""
+        if self.music_cache is not None:
+            return self.music_cache
         if self.library_dir is None:
             return None
         library_id = hashlib.sha256(str(self.library_dir.path).encode("utf-8")).hexdigest()[:20]
-        return ResolvedPath(self.cache_dir.path / "predictions" / f"predictions-{library_id}.pkl")
+        return ResolvedPath(default_music_dir().path / "predictions" / f"predictions-{library_id}.pkl")
 
     def to_raw(self) -> RawConfig:
         return RawConfig(
-            cache_dir=str(self.cache_dir),
+            model_cache=str(self.model_cache),
             library_dir=str(self.library_dir) if self.library_dir is not None else msgspec.UNSET,
             mode=self.blend_mode,
             threshold=self.threshold,
@@ -104,9 +109,9 @@ class Config:
 
 DEFAULT_THRESHOLD: Final = 0.5
 DEFAULT_CONFIG = LayerConfig(
-    cache_dir=default_cache_dir(),
+    model_cache=default_model_cache_dir(),
     library_dir=None,
-    cache_path=None,
+    music_cache=None,
     blend_mode="and",
     threshold=DEFAULT_THRESHOLD,
     count=None,
@@ -129,7 +134,7 @@ class RawConfig(msgspec.Struct, forbid_unknown_fields=True, omit_defaults=True):
     unset fields, so the same struct drives reading and writing the file.
     """
 
-    cache_dir: str | msgspec.UnsetType = msgspec.UNSET
+    model_cache: str | msgspec.UnsetType = msgspec.UNSET
     library_dir: str | msgspec.UnsetType = msgspec.UNSET
     mode: BlendMode | msgspec.UnsetType = msgspec.UNSET
     threshold: float | msgspec.UnsetType = msgspec.UNSET
@@ -174,7 +179,7 @@ def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:
     if isinstance(args, CreateArgs):
         return LayerConfig(
             library_dir=_path_or_unset(args.library),
-            cache_path=_path_or_unset(args.cache),
+            music_cache=_path_or_unset(args.music_cache),
             blend_mode=_non_empty_or_unset(args.mode),
             threshold=_non_empty_or_unset(args.threshold),
             count=_non_empty_or_unset(args.count),
@@ -183,13 +188,14 @@ def config_from_args(args: IndexArgs | CreateArgs | SetupArgs) -> LayerConfig:
         )
     if isinstance(args, IndexArgs):
         return LayerConfig(
+            model_cache=_path_or_unset(args.model_cache),
             library_dir=_path_or_unset(args.library),
-            cache_path=_path_or_unset(args.cache),
+            music_cache=_path_or_unset(args.music_cache),
             device=_non_empty_or_unset(args.device),
         )
     if isinstance(args, SetupArgs):
         return LayerConfig(
-            cache_dir=_path_or_unset(args.cache_dir),
+            model_cache=_path_or_unset(args.model_cache),
             library_dir=_path_or_unset(args.library),
             blend_mode=_non_empty_or_unset(args.mode),
             show_extended=UNSET if not args.show_extended else True,
@@ -201,7 +207,7 @@ def config_from_user_file() -> LayerConfig:
     """Return the user config-file layer; absent keys stay UNSET."""
     raw = RawConfig.from_user_config()
     return LayerConfig(
-        cache_dir=_path_or_unset(raw.cache_dir),
+        model_cache=_path_or_unset(raw.model_cache),
         library_dir=_path_or_unset(raw.library_dir),
         blend_mode=_non_empty_or_unset(raw.mode),
         threshold=_non_empty_or_unset(raw.threshold),

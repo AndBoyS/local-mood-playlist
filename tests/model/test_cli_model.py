@@ -13,7 +13,7 @@ def _track_entries(text: str) -> list[str]:
 def test_create_writes_playlist_from_indexed_cache(indexed_library: IndexedLibrary) -> None:
     context = indexed_library.context
     playlist = context.playlists_dir / "energetic.m3u8"
-    result = context.run("create", "energetic", "--cache", str(indexed_library.cache), "-t", "0.1", "-o", str(playlist))
+    result = context.run("create", "energetic", "--music-cache", str(indexed_library.music_cache), "-t", "0.1", "-o", str(playlist))
     assert result.exit_code == 0, result.stderr
 
     text = playlist.read_text(encoding="utf-8")
@@ -29,7 +29,7 @@ def test_create_writes_playlist_from_indexed_cache(indexed_library: IndexedLibra
 
 
 def test_create_without_output_prints_absolute_entries(indexed_library: IndexedLibrary) -> None:
-    result = indexed_library.context.run("create", "energetic", "--cache", str(indexed_library.cache), "-t", "0.1")
+    result = indexed_library.context.run("create", "energetic", "--music-cache", str(indexed_library.music_cache), "-t", "0.1")
     assert result.exit_code == 0, result.stderr
 
     entries = _track_entries(result.stdout)

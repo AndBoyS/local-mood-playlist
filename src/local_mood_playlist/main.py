@@ -237,12 +237,12 @@ def create_cmd(args: CreateArgs) -> None:
 
     output_path = _resolve_playlist_output(cfg.output, moods, mode=mode, threshold=cfg.threshold)
 
-    if cfg.cache_path is None and cfg.library_dir is not None:
+    if cfg.music_cache is None and cfg.library_dir is not None:
         _ = require_library_dir(cfg, command="create")
     cache_path = cfg.pred_cache_path
 
     if cache_path is None and not dry_run:
-        _fail("create", "pass --cache or --library (or run `moodpl setup`) to use indexed predictions")
+        _fail("create", "pass --music-cache or --library (or run `moodpl setup`) to use indexed predictions")
 
     if dry_run and (cache_path is None or not cache_path.path.is_file()):
         _print_request_preview(moods, mode=mode, threshold=cfg.threshold, count=cfg.count, output_path=output_path)
@@ -331,10 +331,11 @@ def index_cmd(args: IndexArgs) -> None:
         cache_path = cfg.pred_cache_path
         if cache_path is None:
             _fail("index", "configured library has no prediction cache path")
+        print(f"Music cache: {cache_path}")
         summary = index_library(
             library,
             cache_path=cache_path,
-            cache_root=cfg.cache_dir,
+            cache_root=cfg.model_cache,
             device=cfg.device,
             force=force,
             on_progress=report_progress,
@@ -355,13 +356,13 @@ def index_cmd(args: IndexArgs) -> None:
     if summary.predictions_failed > _MAX_FAILURES_TO_PRINT:
         remaining_failures = summary.predictions_failed - _MAX_FAILURES_TO_PRINT
         print(f"  ... and {remaining_failures} more failures", file=sys.stderr)
-    print(f"  Cache: {summary.cache_path}")
+    print(f"  Music cache: {summary.cache_path}")
 
 
 def setup_cmd(args: SetupArgs) -> None:
     non_interactive = not (sys.stdin.isatty() and sys.stdout.isatty())
     arg_config = config_from_args(args)
-    cache_dir = args.cache_dir
+    model_cache = args.model_cache
     mode = args.mode
     show_extended = args.show_extended
     del args  # remaining fields resolve through config/prompts
@@ -371,11 +372,11 @@ def setup_cmd(args: SetupArgs) -> None:
         library = _setup_library_dir(pre_interactive_cfg, non_interactive=non_interactive)
 
         if not non_interactive:
-            answer = _prompt_path("Cache directory", default=str(pre_interactive_cfg.cache_dir))
+            answer = _prompt_path("Model cache directory", default=str(pre_interactive_cfg.model_cache))
             if answer is None:
                 _cancel()
             if len(answer.strip()) > 0:
-                cache_dir = answer
+                model_cache = answer
 
         audio_count = sum(path.is_file() and path.suffix.lower() in AUDIO_SUFFIXES for path in library.path.rglob("*"))
         if audio_count == 0:
@@ -397,7 +398,7 @@ def setup_cmd(args: SetupArgs) -> None:
 
         final_args = SetupArgs(
             library=str(library),
-            cache_dir=cache_dir,
+            model_cache=model_cache,
             mode=mode,
             show_extended=show_extended,
         )
@@ -499,7 +500,7 @@ def main() -> None:
                 tap.SubParser("moods", tap.TypedArgs, help="List selectable mood labels"),
                 tap.SubParser("create", CreateArgs, help="Create a playlist from selected mood tags"),
                 tap.SubParser("index", IndexArgs, help="Analyze library tracks and cache mood predictions"),
-                tap.SubParser("setup", SetupArgs, help="Configure the library directory, cache dir, and blend mode"),
+                tap.SubParser("setup", SetupArgs, help="Configure the library directory, model cache, and blend mode"),
                 description="Create local playlists from a fixed set of mood tags.",
             ),
             prog="moodpl",

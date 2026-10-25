@@ -26,7 +26,7 @@ from huggingface_hub import HfApi
 from safetensors.torch import save as save_safetensors
 
 from local_mood_playlist.assets import BUNDLE_FILES, VENDORED_REPO, dir_digest
-from local_mood_playlist.config import default_cache_dir
+from local_mood_playlist.config import default_model_cache_dir
 
 MUSIC2EMO_UPSTREAM_REPO = "amaai-lab/music2emo"
 MUSIC2EMO_UPSTREAM_REVISION = "b036e59471583c3d5b30c69e63e8c7323cc36c4a"
@@ -223,7 +223,7 @@ def main() -> None:
     _ = parser.add_argument("--upload", action="store_true", help="publish staging directory to HF")
     args = parser.parse_args()
 
-    staging = default_cache_dir() / "music2emo-publish"
+    staging = default_model_cache_dir() / "music2emo-publish"
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
