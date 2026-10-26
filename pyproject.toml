@@ -169,20 +169,6 @@ ignore = [
 [tool.ruff.lint.pylint]
 max-positional-args = 2
 
-[tool.ruff.lint.per-file-ignores]
-"tests/*" = ["PLC0415", "PLR2004", "PLR0917", "PT017", "TRY301"]
-"scripts/*" = [
-    "E402",
-    "PLW0603",
-    "PLR2004",
-    "PERF401",
-    "UP031",
-    "B905",
-    "SIM102",
-    "FURB192",
-    "PLW0108",
-    "SIM222",
-]
 
 [tool.pyrefly]
 project-excludes = [
@@ -190,7 +176,6 @@ project-excludes = [
     "src/local_mood_playlist/vendor/model/**",
     "src/local_mood_playlist/vendor/utils/**",
     "src/local_mood_playlist/vendor/inference/**",
-    "scripts/**",
 ]
 use-ignore-files = false
 output-format = "min-text"

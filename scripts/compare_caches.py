@@ -18,6 +18,8 @@ with new_path.open("rb") as f:
 
 old_entries = {str(key): value for key, value in old["entries"].items()}
 new_entries = {str(key): value for key, value in new["entries"].items()}
+
+FP_LEVEL_DIFF = 1e-5
 assert old["model_version"] == new["model_version"]
 
 assert set(old_entries) == set(new_entries), (
@@ -40,4 +42,4 @@ for key in sorted(old_entries):
 
 print(f"entries: {len(old_entries)}")
 print(f"max mood-score diff: {max_diff:.3e} ({worst})")
-print("IDENTICAL" if max_diff == 0.0 else ("CLOSE (fp-level)" if max_diff < 1e-5 else "MISMATCH"))
+print("IDENTICAL" if max_diff == 0.0 else ("CLOSE (fp-level)" if max_diff < FP_LEVEL_DIFF else "MISMATCH"))

@@ -1,4 +1,3 @@
-
 import pytest
 from cli import IndexedLibrary
 
@@ -7,6 +6,8 @@ from local_mood_playlist.paths import ResolvedPath
 from local_mood_playlist.predictions import PredictionCache
 
 pytestmark = [pytest.mark.model]
+
+VALENCE_AROUSAL_MAX = 10.0
 
 
 def test_cached_predictions_match_the_pinned_structure(indexed_library: IndexedLibrary) -> None:
@@ -17,5 +18,5 @@ def test_cached_predictions_match_the_pinned_structure(indexed_library: IndexedL
     for prediction in predictions.values():
         assert len(prediction.mood_scores) > 0
         assert all(0.0 <= float(score) <= 1.0 for score in prediction.mood_scores.values())
-        assert 0.0 <= prediction.valence <= 10.0
-        assert 0.0 <= prediction.arousal <= 10.0
+        assert 0.0 <= prediction.valence <= VALENCE_AROUSAL_MAX
+        assert 0.0 <= prediction.arousal <= VALENCE_AROUSAL_MAX

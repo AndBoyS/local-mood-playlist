@@ -9,6 +9,10 @@ from const import REPO_DIR
 
 CONTEXT = "local/model-tests"
 
+PYTEST_USAGE_ERROR = 4
+PYTEST_NO_TESTS_COLLECTED = 5
+EXIT_COMMAND_NOT_FOUND = 127
+
 
 def die(message: str) -> NoReturn:
     print(message, file=sys.stderr)
@@ -30,8 +34,9 @@ def main() -> None:
     host = sh("hostname", "-s")
 
     sha = sh("git", "rev-parse", "HEAD")
-    sh("git", "fetch", "--quiet")
-    if not sh("git", "branch", "-r", "--contains", sha):
+    _ = sh("git", "fetch", "--quiet")
+    remote_branches = sh("git", "branch", "-r", "--contains", sha)
+    if remote_branches == "":
         die(f"HEAD ({sha}) is not on any remote-tracking branch; push first (or fetch if pushed elsewhere).")
 
     fd, log_name = tempfile.mkstemp(prefix="model-tests-", suffix=".log")
@@ -54,7 +59,7 @@ def main() -> None:
         # Shell semantics don't apply to list-form Popen: a missing `uv` binary
         # raises ENOENT instead of yielding the shell's exit 127.
         log.unlink()
-        code = 127
+        code = EXIT_COMMAND_NOT_FOUND
     except OSError:
         log.unlink()
     else:
@@ -63,22 +68,22 @@ def main() -> None:
         with log.open("w", encoding="utf-8") as log_file:
             try:
                 for line in stream:
-                    sys.stdout.write(line)
-                    log_file.write(line)
+                    _ = sys.stdout.write(line)
+                    _ = log_file.write(line)
             except BaseException:
                 pytest_proc.kill()
-                pytest_proc.wait()
+                _ = pytest_proc.wait()
                 raise
         code = pytest_proc.wait()
         log_written = True
 
     if code == 0:
         state, reason = "success", f"model tests passed on {host}"
-    elif code == 4:
+    elif code == PYTEST_USAGE_ERROR:
         state, reason = "failure", f"pytest usage error on {host} (exit 4; check extra args)"
-    elif code == 5:
+    elif code == PYTEST_NO_TESTS_COLLECTED:
         state, reason = "failure", f"no model tests collected on {host} (mark tests with pytest.mark.model)"
-    elif code == 127:
+    elif code == EXIT_COMMAND_NOT_FOUND:
         state, reason = "failure", f"uv not found on {host}"
     elif code is None:
         state, reason = "failure", f"model tests failed on {host} (could not start pytest)"
@@ -93,7 +98,7 @@ def main() -> None:
     if head_moved:
         die(f"HEAD moved while tests ran ({sha}); not posting a stale status. Re-run.")
 
-    sh(
+    _ = sh(
         "gh",
         "api",
         f"repos/{repo}/statuses/{sha}",

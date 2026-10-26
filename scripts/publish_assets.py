@@ -225,7 +225,7 @@ def main() -> None:
     _ = parser.add_argument("--upload", action="store_true", help="publish staging directory to HF")
     args = parser.parse_args()
 
-    staging = default_model_cache_dir() / "music2emo-publish"
+    staging = default_model_cache_dir().path / "music2emo-publish"
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
