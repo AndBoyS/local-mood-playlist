@@ -1,16 +1,14 @@
 """Checkbox mood picker with a live-blend-mode toggle key (InquirerPy)."""
 
 from collections.abc import Sequence
-from typing import Final, NamedTuple, get_args, override
+from typing import Final, NamedTuple, override
 
 from InquirerPy.base.control import Choice
 from InquirerPy.prompts.list import InquirerPyListControl, ListPrompt
 from InquirerPy.utils import InquirerPyKeybindings, get_style
 from prompt_toolkit.key_binding import KeyPressEvent
 
-from local_mood_playlist.moods import BlendMode, MoodName
-
-_MODE_CYCLE: Final[tuple[BlendMode, ...]] = get_args(BlendMode)
+from local_mood_playlist.moods import BLEND_MODES, BlendMode, MoodName
 
 _INSTRUCTION: Final[str] = "(↑↓/jk move, Space toggle, <m> blend mode, Enter confirm)"
 _EMPTY_SELECTION_ERROR: Final[str] = "select at least one mood"
@@ -122,7 +120,7 @@ class MoodPrompt(ListPrompt):
 
 
 def _next_mode(mode: BlendMode) -> BlendMode:
-    return _MODE_CYCLE[(_MODE_CYCLE.index(mode) + 1) % len(_MODE_CYCLE)]
+    return BLEND_MODES[(BLEND_MODES.index(mode) + 1) % len(BLEND_MODES)]
 
 
 MoodAndColor = tuple[MoodName, str]

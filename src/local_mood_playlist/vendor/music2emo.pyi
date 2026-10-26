@@ -12,6 +12,10 @@ class Music2emoPrediction(TypedDict):
     mood_scores: dict[str, float]
 
 
+class PreparedAudio:
+    """Opaque per-track preprocessing output; consumed only by ``infer``."""
+
+
 class Music2emo:
     def __init__(
         self,
@@ -25,5 +29,9 @@ class Music2emo:
 
     def predict(self, audio: str | Path, threshold: float = 0.5) -> Music2emoPrediction: ...
 
+    def prepare(self, audio: str | Path) -> PreparedAudio: ...
 
-__all__ = ["Music2emo", "Music2emoPrediction"]
+    def infer(self, prepared: PreparedAudio, threshold: float = 0.5) -> Music2emoPrediction: ...
+
+
+__all__ = ["Music2emo", "Music2emoPrediction", "PreparedAudio"]

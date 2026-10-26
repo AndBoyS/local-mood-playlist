@@ -13,6 +13,7 @@ from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 
 from local_mood_playlist.args import CreateArgs, IndexArgs, SetupArgs
+from local_mood_playlist.assets import AssetDownloadProgress, asset_download
 from local_mood_playlist.config import (
     DEFAULT_THRESHOLD,
     Config,
@@ -24,7 +25,7 @@ from local_mood_playlist.config import (
 )
 from local_mood_playlist.indexing import (
     AUDIO_SUFFIXES,
-    ProgressUpdate,
+    IndexSummary,
     index_library,
 )
 from local_mood_playlist.mood_picker import (
@@ -202,12 +203,12 @@ def _resolve_playlist_output(
     return ResolvedPath(candidate)
 
 
-def _validate_playlist_output_path(output_path: ResolvedPath, cache_path: ResolvedPath | None) -> None:
+def _validate_playlist_output_path(output_path: ResolvedPath, cache_path: ResolvedPath) -> None:
     if output_path.path.suffix.lower() != ".m3u8":
         raise ValueError("playlist output path must end in .m3u8")
     if output_path.path.parent.is_file():
         raise ValueError(f"playlist output parent directory is an existing file: {output_path.path.parent}")
-    if cache_path is not None and output_path == cache_path:
+    if output_path == cache_path:
         raise ValueError("playlist output path must not overwrite prediction cache")
 
 
@@ -248,9 +249,7 @@ def create_cmd(args: CreateArgs) -> None:
         _print_request_preview(moods, mode=mode, threshold=cfg.threshold, count=cfg.count, output_path=output_path)
         return
 
-    if cache_path is None:
-        _fail("create", "no prediction cache available")
-
+    assert cache_path is not None, "Already processed this case"
     try:
         cache = PredictionCache(cache_path, model_version=MODEL_VERSION)
         ranked = rank_cached_tracks(cache, moods=moods, mode=mode, limit=cfg.count, min_score=cfg.threshold)
@@ -287,6 +286,24 @@ def _print_preview_details(moods: list[MoodName], *, mode: BlendMode, threshold:
     print(f"  Threshold: {detail.threshold_label} >= {threshold:g}")
 
 
+_WORK_BAR_WIDTH = 30
+
+
+def _bar(done: int, total: int, *, width: int = _WORK_BAR_WIDTH) -> str:
+    filled = done * width // total
+    return "#" * filled + "-" * (width - filled)
+
+
+MB = 1 << 20
+
+
+def _print_download_pbar(progress: AssetDownloadProgress) -> str:
+    which = progress.files_processed + 1
+    if progress.file_complete:
+        return f"Downloaded {which}/{progress.files_total} {progress.current_file_name} ({progress.done_bytes / MB:.1f} MB)"
+    return f"Downloading {which}/{progress.files_total} {progress.current_file_name}..."
+
+
 def _print_request_preview(
     moods: list[MoodName], *, mode: BlendMode, threshold: float, count: int | None, output_path: ResolvedPath | None
 ) -> None:
@@ -297,31 +314,12 @@ def _print_request_preview(
         print(f"  Would write: {output_path}")
 
 
-def index_cmd(args: IndexArgs) -> None:
-    progress_started = monotonic()
-    progress_active = False
+MINUTES = 60
 
-    def report_progress(update: ProgressUpdate) -> None:
-        nonlocal progress_active
-        completed, total, audio_path = update
-        if total == 0:
-            return
-        width = 30
-        filled = width * completed // total
-        bar = "#" * filled + "-" * (width - filled)
-        percent = completed * 100 // total
-        if completed == 0:
-            eta = "ETA calculating"
-        else:
-            remaining = int((monotonic() - progress_started) / completed * (total - completed))
-            eta = f"ETA {remaining // 60:02d}m{remaining % 60:02d}s"
-        track_name = "starting" if audio_path is None else audio_path.path.name[:48]
-        progress_line = f"Indexing [{bar}] {percent:3d}% {completed}/{total} {eta} {track_name}"
-        if sys.stderr.isatty():
-            print(f"\r{progress_line}", end="", file=sys.stderr, flush=True)
-            progress_active = True
-        else:
-            print(progress_line, file=sys.stderr, flush=True)
+
+def index_cmd(args: IndexArgs) -> None:
+    progress_active = False
+    progress_line_len = 0
 
     try:
         cfg = resolve_configs(config_from_args(args), config_from_user_file())
@@ -332,31 +330,75 @@ def index_cmd(args: IndexArgs) -> None:
         if cache_path is None:
             _fail("index", "configured library has no prediction cache path")
         print(f"Music cache: {cache_path}")
-        summary = index_library(
+
+        # Validates the library, scans it, and partitions against the cache
+        # eagerly — a bad or empty library fails here, before asset work.
+        indexing = index_library(
             library,
             cache_path=cache_path,
             cache_root=cfg.model_cache,
             device=cfg.device,
             force=force,
-            on_progress=report_progress,
         )
+
+        print("Verifying vendored assets...", file=sys.stderr, flush=True)
+
+        for progress in asset_download(cfg.model_cache):
+            print(_print_download_pbar(progress), file=sys.stderr, flush=True)
+
+        progress_started = monotonic()
+        summary: IndexSummary | None = None
+
+        for frame in indexing:
+            if isinstance(frame, IndexSummary):
+                summary = frame
+                break
+
+            percent = frame.processed * 100 // frame.to_process
+            if frame.processed == 0:
+                eta = "ETA calculating"
+            else:
+                remaining = int(
+                    (monotonic() - progress_started) / frame.processed * (frame.to_process - frame.processed)
+                )
+                eta = f"ETA {remaining // MINUTES:02d}m{remaining % MINUTES:02d}s"
+
+            track_name = frame.path_being_predicted.path.name[:48]
+            progress_line = (
+                f"Indexing [{_bar(frame.processed, frame.to_process)}]"
+                f" {percent:3d}% predicting {frame.processed}/{frame.to_process}"
+                f" {eta} {track_name}"
+            )
+            if sys.stderr.isatty():
+                # Pad to the previous redraw's width so a shorter next line
+                # erases its stale characters instead of leaving them behind.
+                print(f"\r{progress_line.ljust(progress_line_len)}", end="", file=sys.stderr, flush=True)
+                progress_line_len = len(progress_line)
+                progress_active = True
+            else:
+                print(progress_line, file=sys.stderr, flush=True)
     except (OSError, TypeError, ValueError, RuntimeError) as error:
+        # Close any dangling bar line.
+        if progress_active:
+            progress_active = False
+            print(file=sys.stderr, flush=True)
         print(f"moodpl index: {error}", file=sys.stderr)
         raise SystemExit(2) from error
     finally:
         if progress_active:
             print(file=sys.stderr, flush=True)
 
+    assert summary is not None, "index_library always ends with a summary unless it raised above."
     print(f"Indexed {summary.tracks_found} audio files")
     print(f"  Reused: {summary.predictions_reused}")
     print(f"  Predicted: {summary.predictions_computed}")
-    print(f"  Failed: {summary.predictions_failed}")
+    print(f"  Failed: {len(summary.failures)}")
     for failure in summary.failures[:_MAX_FAILURES_TO_PRINT]:
         print(f"  {failure.audio_path}: {failure.error}", file=sys.stderr)
-    if summary.predictions_failed > _MAX_FAILURES_TO_PRINT:
-        remaining_failures = summary.predictions_failed - _MAX_FAILURES_TO_PRINT
+    if len(summary.failures) > _MAX_FAILURES_TO_PRINT:
+        remaining_failures = len(summary.failures) - _MAX_FAILURES_TO_PRINT
         print(f"  ... and {remaining_failures} more failures", file=sys.stderr)
-    print(f"  Music cache: {summary.cache_path}")
+    print(f"  Music cache: {cache_path}")
 
 
 def setup_cmd(args: SetupArgs) -> None:
@@ -416,12 +458,12 @@ def setup_cmd(args: SetupArgs) -> None:
     print("Next: moodpl index")
 
 
-def _prompt_path(question: str, *, default: str | None = None, only_directories: bool = True) -> str | None:
+def _prompt_path(question: str, *, default: str | None = None) -> str | None:
     answer = _run_prompt(
         lambda: inquirer.filepath(
             question,
             default="" if default is None else default,
-            only_directories=only_directories,
+            only_directories=True,
             style=PICKER_STYLE,
         ).execute()
     )

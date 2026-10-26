@@ -18,7 +18,7 @@ to 7 transformer layers + zstd, config patch) by
 `scripts/publish_assets.py` once per upstream revision and published to the
 vendored Hugging Face repo `music2emo-inference-assets`. On first use
 `src/local_mood_playlist/assets.py` downloads the pinned vendored revision,
-verifies whole-directory digests, and caches under the project `.cache`
+verifies per-file digests, and caches under the project `.cache`
 directory. The pickle checkpoints from upstream are never executed.
 
 Local patch in `music2emo.py`:

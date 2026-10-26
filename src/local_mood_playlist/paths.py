@@ -50,9 +50,6 @@ class RelativePath:
 
     path: Path
 
-    def __str__(self) -> str:
-        return self.as_posix()
-
     def as_posix(self) -> str:
         return self.path.as_posix()
 

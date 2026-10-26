@@ -9,7 +9,7 @@ from typing import BinaryIO
 
 
 @contextmanager
-def open_atomic(filepath: Path, *, prefix: str | None = None) -> Generator[BinaryIO]:
+def open_atomic(filepath: Path) -> Generator[BinaryIO]:
     """Open a temporary file next to filepath; atomically replace filepath on clean exit.
 
     The destination keeps its old content if the body raises before exit. Data is
@@ -22,7 +22,7 @@ def open_atomic(filepath: Path, *, prefix: str | None = None) -> Generator[Binar
     try:
         descriptor, raw_name = tempfile.mkstemp(
             dir=filepath.parent,
-            prefix=prefix if prefix is not None else f".{filepath.name}.",
+            prefix=f".{filepath.name}.",
             suffix=".tmp",
         )
         temp_path = Path(raw_name)

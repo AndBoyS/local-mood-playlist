@@ -25,7 +25,7 @@ from const import REPO_DIR
 from huggingface_hub import HfApi
 from safetensors.torch import save as save_safetensors
 
-from local_mood_playlist.assets import BUNDLE_FILES, VENDORED_REPO, dir_digest
+from local_mood_playlist.assets import PINNED_FILES, VENDORED_REPO, file_digest
 from local_mood_playlist.config import default_model_cache_dir
 
 MUSIC2EMO_UPSTREAM_REPO = "amaai-lab/music2emo"
@@ -188,8 +188,7 @@ def build_staging(staging: Path) -> dict[str, str]:
         target.parent.mkdir(parents=True, exist_ok=True)
         _ = target.write_bytes(payload)
 
-    # Whole-directory digests: these are the constants pinned in assets.py.
-    return {name: dir_digest(staging, rels) for name, rels in BUNDLE_FILES.items()}
+    return {rel: file_digest(staging / rel) for rel in PINNED_FILES}
 
 
 def upload(staging: Path) -> str:
@@ -205,16 +204,19 @@ def upload(staging: Path) -> str:
 
 
 def update_assets_pins(digests: dict[str, str]) -> None:
-    """Write the bundle-dir digest pins into assets.py."""
+    """Write the per-file digest pins into assets.py."""
     path = REPO_DIR / "src/local_mood_playlist/assets.py"
     text = path.read_text(encoding="utf-8")
-    for name in BUNDLE_FILES:
-        marker = f'"{name}": "'
-        start = text.index(marker)
+    for rel, digest in digests.items():
+        marker = f'"{rel}": "'
+        try:
+            start = text.index(marker)
+        except ValueError:
+            raise RuntimeError(f"assets.py has no pin slot for {rel}; add it to FILE_SHA256S first") from None
         end = text.index('"', start + len(marker))
-        text = text[: start + len(marker)] + digests[name] + text[end:]
+        text = text[: start + len(marker)] + digest + text[end:]
     _ = path.write_text(text, encoding="utf-8")
-    print("assets.py updated: bundle pins")
+    print("assets.py updated: file pins")
 
 
 def main() -> None:
@@ -237,7 +239,7 @@ def main() -> None:
         print()
         print(f"published as revision {revision}")
         update_assets_pins(digests)
-        print("Snapshot-dir digests now pinned in assets.py (matches this upload's bytes).")
+        print("Per-file digests now pinned in assets.py (matches this upload's bytes).")
         print('Set VENDORED_REVISION = "' + revision + '" in src/local_mood_playlist/assets.py.')
 
 

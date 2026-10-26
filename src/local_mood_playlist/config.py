@@ -237,13 +237,11 @@ def resolve_configs(*layers: LayerConfig, default: LayerConfig = DEFAULT_CONFIG)
     return Config(**kwargs)  # pyrefly: ignore[bad-argument-type]
 
 
-def dump_raw_config(cfg: Config, path: Path | None = None) -> dict[str, object]:
-    """Write the resolved config to the user config file (or ``path``); return the TOML payload."""
+def dump_raw_config(cfg: Config, path: Path) -> dict[str, object]:
     raw = cfg.to_raw()
 
-    target = path if path is not None else config_path()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    _ = target.write_bytes(msgspec.toml.encode(raw))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_bytes(msgspec.toml.encode(raw))
 
     payload: dict[str, object] = msgspec.to_builtins(raw)
     return payload
