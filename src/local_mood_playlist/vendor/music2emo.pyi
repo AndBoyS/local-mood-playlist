@@ -4,7 +4,6 @@
 from pathlib import Path
 from typing import TypedDict
 
-
 class Music2emoPrediction(TypedDict):
     valence: float
     arousal: float

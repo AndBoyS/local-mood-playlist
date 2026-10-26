@@ -45,7 +45,7 @@ Local patch in `music2emo.py`:
   `config.json`; identical outputs to the untruncated hub checkpoint
   (bit-identical hidden states).
 - Run MERT through the pure-torch reimplementation in
-  `local_mood_playlist.mert_model` (numeric port of the HuBERT feature
+  `local_mood_playlist.vendor.mert_model` (numeric port of the HuBERT feature
   encoder, encoder, and encoder-layer the checkpoint weights target, with
   `Wav2Vec2FeatureExtractor` normalization reproduced inline): fp32 CPU and
   MPS fp16 outputs are bit-identical to the transformers build of the same
@@ -70,5 +70,5 @@ Runtime dependencies are managed by the main project environment in
 `pyproject.toml`/`uv.lock`. This project uses a Python 3.13-compatible PyTorch
 version; MERT weights are managed by the project asset cache (see
 `src/local_mood_playlist/assets.py`) and run through the local pure-torch
-backbone (`local_mood_playlist.mert_model`), so transformers and
+backbone (`local_mood_playlist.vendor.mert_model`), so transformers and
 huggingface_hub are not runtime dependencies.

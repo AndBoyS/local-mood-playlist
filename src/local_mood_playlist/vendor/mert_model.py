@@ -8,10 +8,6 @@ no-op). Class structure mirrors the checkpoint's safetensors key tree;
 forward math routes through functional calls so ops are spelled out.
 fp32 CPU and MPS fp16 outputs are bit-identical to the transformers build
 of the same checkpoint.
-
-Shape contracts use the pyrefly shape system; symbols live under
-``TYPE_CHECKING`` and annotations are deferred, so the package runs
-without the stubs.
 """
 
 from __future__ import annotations

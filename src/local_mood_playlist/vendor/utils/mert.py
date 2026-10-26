@@ -11,7 +11,7 @@ from typing import Final
 
 import numpy as np
 import torch
-from local_mood_playlist.mert_model import load_mert_backbone, mert_sample_rate_check
+from local_mood_playlist.vendor.mert_model import load_mert_backbone, mert_sample_rate_check
 
 _HIDDEN_STATES: Final = (6, 7)
 
